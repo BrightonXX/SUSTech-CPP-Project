@@ -1,0 +1,735 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{setspace}
+\usepackage[hidelinks]{hyperref}
+\usepackage{graphicx}
+
+\usepackage[most]{tcolorbox} % 加载 tcolorbox 及其 listings 库
+\definecolor{bgcolor}{RGB}{230,230,230}
+\definecolor{bgcolor2}{RGB}{240,230,240}
+\definecolor{licolor}{RGB}{100,100,100}
+\linespread{1.2} 
+\usepackage{algorithmic}
+\usepackage[a4paper, left=2.5cm, right=2.5cm, top=3cm, bottom=2.5cm]{geometry}
+\usepackage{ctex} 
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\lhead{\textbf{Brighton}}
+\chead{A Simple Calculator}
+\rhead{CS219 Project1}
+
+\newtcblisting{commandline}{
+  breakable,                     % 允许代码块跨页
+  colback=bgcolor,               % 背景色为灰色
+  colframe=licolor,              % 边框色同背景色（若想显示
+  listing only,
+  arc=5mm,                       % 设置圆角半径
+  boxrule=1pt,                   % 不显示边框线，如需要可调大此数值
+  left=6pt, right=6pt, top=6pt, bottom=6pt, % 设置内边距
+}
+\newtcblisting{codeline}{
+  breakable,                     
+  colback=bgcolor2,               
+  colframe=licolor,              
+  listing only,                  
+  arc=5mm,                       
+  boxrule=1pt,                   
+  left=3pt, right=3pt, top=3pt, bottom=3pt, 
+  listing options={
+    basicstyle=\ttfamily\fontsize{10pt}{11pt}\selectfont,         % 代码字体
+    language=bash,                
+    showstringspaces=false,       
+    aboveskip=2mm, belowskip=2mm, % 上下间距
+    columns=flexible,             % 让字体对齐
+    keepspaces=true,
+    escapeinside={(*@}{@*)},      % 允许使用 LaTeX 命令
+    numbers=none,
+    frame=none,
+  },
+  before=\setstretch{0.8},        % 设置行间距 1.5 倍
+}
+
+\title{\textbf{A Simple Calculator}}
+\author{} % 清空默认作者区
+\date{}   % 清空默认日期区
+
+% 自定义标题布局
+\makeatletter
+\renewcommand{\maketitle}{
+  \begin{center}
+    {\LARGE \@title \par} % 标题
+    \vspace{1em}
+    \textbf{\@author}     % 原作者区（可保留）
+    \vspace{1em}
+    \begin{tabular}{ll}
+      Student ID: & 12312710 \\
+      Name:       & 胥熠/Brighton \\
+      Course:     & CS219: Advanced Programming \\
+      Date:       & \today
+    \end{tabular}
+    \vspace{0.5em}
+    \hrule height 0.8pt % 分隔线
+  \end{center}
+}
+\makeatother
+
+\begin{document}
+\thispagestyle{empty}
+\maketitle
+
+{
+\setstretch{1.2}
+\tableofcontents
+}
+\vspace{2em}
+\section{前言}
+\textbf{你知道的}，于++的5个Project一直是南科大大佬们秀技的修罗场。在GitHub上看了几位学长的report，说实话读完之后冥冥中产生了一种畏惧感。但转机恰巧在这个学期出现了，\textit{\sout{“本来十几天前就该布置的Project，硬是被DeepSeek搞破防了。}”}显然，这一次project的侧重方向悄然的发生了某些改变，我们如何科学的使用AI辅助coding成为了我们必须掌握的一种技能，而这次project会不可避免的考查我们这个部分的能力。因此，本project在完成基本要求和部分进阶要求的前提下，融入了大量的科学使用AI工具能力的内容。
+
+\section{功能展示}
+\subsection{运行环境}
+本程序是由C语言编写。在Intel i9-13900HX运行下的Windows 11(x64)系统中，使用Powershell使用下列代码编译和运行（calculator.c放置在path文件夹内）：
+\begin{commandline}
+PS *path*> gcc -o calculator calculator.c -std=c11
+PS *path*> ./calculator
+\end{commandline}
+
+\subsection{交互式输入输出}
+直接在命令行中调用：
+\begin{commandline}
+./calculator 1 + 2
+1 + 2 = 3
+\end{commandline}
+不直接在命令行中传入参数，进入连续输入模式：
+\begin{commandline}
+./calculator      
+Enter expressions (e.g., 2 + 3). Type 'quit' to exit.
+> 3 * 4
+3 * 4 = 12
+> 114514 + 1919810
+114514 + 1919810 = 2034324
+> help
+
+Expression: (Number) (Operator) (Number) or (function)
+Number can be a function like sqrt(2), exp(1)
+Supported operators: +, -, x, /
+Supported functions: sqrt(x), exp(x)
+to set precision for infinite number, use precision(integer), default 10.
+
+> quit
+*Program exits*
+\end{commandline}
+
+\subsection{支持多种数字输入形式}
+支持整数，小数，和科学计数法输入。当输入的两个数都为科学计数法形式的时候，输出也为科学计数法形式：
+\begin{commandline}
+> 1.2 - 3.4
+1.2 - 3.4 = -2.2
+> 1.3e10 - 999999999
+1.3e10 - 999999999 = 12000000001
+> 1e200 + 1e200
+1e200 + 1e200 = 2e200
+\end{commandline}
+
+\subsection{对有限精度的数字进行无精度损耗的计算}
+加法，减法和乘法可以进行任意精度的无损计算：
+\begin{commandline}
+> 9999999999999999.0000000000001 + 1.2
+9999999999999999.0000000000001 + 1.2 = 10000000000000000.2000000000001
+> 1e100 - 0.00000000001
+1e100 - 0.00000000001 = 99999999999999999999999999999999999999999999
+99999999999999999999999999999999999999999999999999999999.99999999999
+> 987654321 * 987654321
+987654321 * 987654321 = 975461057789971041
+\end{commandline}
+
+\subsection{支持部分函数调用}
+内置了开根，指数函数，并支持直接在计算中使用。调用方式为$sqrt(x),exp(x)$
+\begin{commandline}
+> sqrt(10)
+sqrt(10) = 3.162277660   			
+> exp(3)   		
+exp(3) = 20.08553692				
+> exp(3) / exp(2)
+exp(3) / exp(2) = 2.718281828 		
+> sqrt(120) + 1e4
+sqrt(120) + 1e4 = 10010.95445115 
+\end{commandline}
+
+\subsection{对无限精度的数字进行任意精度调整和计算}
+对于除法，sqrt和exp函数，计算无法获取完整的精度，因此，我们需要保留精度，默认精度为10位。
+同时，程序支持使用precision(x)方式调整精度。示例：
+\begin{commandline}
+> 1 / 3  
+1 / 3 = 0.3333333333
+> sqrt(2)
+sqrt(2) = 1.414213562
+> precision(30)
+* Precision set to 30.
+> 1 / 3         
+1 / 3 = 0.333333333333333333333333333333
+> sqrt(2)
+sqrt(2) = 1.41421356237309504880168872421
+> precision(150) 
+* Warning: large precision may cause slow calculation.
+Precision set to 150.
+> 1 / 7
+1 / 7 = 0.142857142857142857142857142857142857142857142857142857
+1428571428571428571428571428571428571428571428571428571428571428
+57142857142857142857142857142857
+\end{commandline}
+计算得上述结果均正确且四舍五入。
+\subsection{错误输入识别}
+可以正确处理使用者的错误输入
+\begin{commandline}
+> 123q + 456
+ --Invalid number, try like '2 + 3'
+> 123 # 345
+ --Invalid operator, try like '2 + 3'
+> 123 +    
+ --Invalid input, try like '2 + 3'
+> 123  
+ --Invalid input, try like 'sqrt(2)'
+> 1 + 2 2
+ --Invalid input, too many tokens!
+> 12 / 0
+ --A number cannot be divided by zero.
+> sqrt(-1)
+ Cannot sqrt a negative number!
+ --Invalid input, try like 'sqrt(2)'
+> precision(-1)
+ERROR: Precision must be a positive integer!
+\end{commandline}
+
+\section{功能实现}
+
+\subsection{高精度}
+
+\subsubsection{分析}
+对于正常范围整数的加减法，则直接调用系统int或者long类型的方法就可以快速解决，但很显然这个project的一大目的就是要求我们手搓自己的处理超大数字的方法。我首先想到的是用一个长度为位数的char数组，每一位分别存储对应的位数，数组的第一位存储个位数的值。例如“1919810114514”可以存储为$[1,9,1,9,8,1,0,1,1,4,5,1,4]$。
+
+
+但我很快意识到一个问题,假如输入是形如“$1234567 \times 1e200$”的话，如果逐位的保存1e200的每一位，将会造成大量的内存浪费以及后续算力的浪费。假如说整数和小数和超级大数用不同逻辑存储的话，计算必将会要多写很多不必要的方法。于是能不能设计一个更加通用的方法储存高精度数字，包括整数，小数和科学计数法呢？
+
+
+众所周知，小数可以看做 整数.小数 部分，但我们也可以转换个思路，可以看做是一个整数 × $10^{n}$ 的计算结果。例如 $3.1415926$，可以写作$31415926 \times 10^{-7}$。
+
+
+同理，对于一个科学计数法，用整数*指数表示的方法更是自然不过。如果是存储正常整数，则可以很自然地存储为 整数 × $10^{0}$。对于负数，我们单独拿一个布尔变量存储数字的正负。由此，我们优雅的找到了一个通用的存储所有数字，同时不会造成资源浪费的方法。
+
+\subsubsection{数据存储方式}
+一个封装的数字总共有个四个信息：存储每一位的数组char[]，一个整数变量存储数组的长度d，一个整数变量存储$10^n$中的n，一个布尔类型存储数字的正负性b。为了读取的方便性，我们把MSB放在了数组的第一位。
+$$
+\text{m} = \sum_{i = 0}^{d} 10^i\times char[d-i-1] \quad (d \in \mathbb{Z},char[d-i-1]\in \{0,1,\dots,9\})
+$$
+$$
+\text{General-Number} = (-1)^b m \times 10^{n} \quad (n \in \mathbb{Z},b=0 or 1)
+$$
+
+\subsubsection{代码实现}
+\begin{commandline}
+typedef struct {
+    char *digits;       // store number from [0-9] ,MSB in char[0]
+    long long digit;    // store count of digits 
+    long long exponent; // store exponent, 10^exponent, 0 as integer
+    bool sign;          // 0: Positive Number 1: Negative Number
+} General_Num;
+\end{commandline}
+存储案例：
+
+\begin{commandline}
+1:{ {1} , 1 , 0 , 0} 
+-3.1415926:{ {3,1,4,1,5,9,2,6} , 7 , -7 , 1}
+1e200:{ {1} , 1 , 200 , 0}
+\end{commandline}
+$1 = (-1)^0 \times 1 \times 10^0$,
+$-3.1415926 = (-1)^1 \times 31415926 \times 10^{-7}$,
+$10^{200} = (-1)^0 \times 1 \times 10^{200}$
+
+\subsection{加减运算}
+\subsubsection{原理}
+假如说我们有两个数，分别为\[
+a_1 = m_1 \times 10^{n_1} , a_2 = m_2 \times 10^{n_2}
+\]
+
+
+·假如说非常凑巧的，$n_1 = n_2$，那么我们的计算就非常的方便和快捷:\[
+a_1 \pm a_2 = (m_1  \pm m_2) \times 10^{n_1}
+\]我们可以直接从char数组的LSB位开始逐位进行加或者减的操作即可。
+
+
+·但假如说不太凑巧，$n_1 \neq n_2$，假定$n_1<n_2$，那么我们可以根据这个原理:
+\[
+a_1 \pm a_2 = m_1 \times 10^{n_1} \pm m_2 \times 10^{n_2}
+\]
+\[
+= m_1 \times 10^{n_1} \pm (m_2 \cdot 10^{(n_2 - n_1)}) \times 10^{n_1}
+\]
+\[
+= \left( m_1 \pm (m_2 \cdot 10^{n_2 - n_1}) \right) \times 10^{n_1}
+\]
+在数据中进行操作：放大$a_2$中存储数据的$digit$，放大倍数为$n_2-n_1$倍。
+
+
+例如$1 \times10^{-1} + 2\times 10^{2}$，我们将指数项更大的$2\times 10^2$改写成$2000 \times 10^{-1}$，然后改写后的数指数项和$a_1$相同，调用指数相同项的加减法即可。以上算法时间复杂度全部在$O(n)$。
+
+\subsubsection{伪代码实现}
+\textit{放原代码过于冗长而且不够优雅，因此我直接让Copilot帮助我生成了伪代码，后续有介绍。同时，因为加法和减法逻辑相似，我这里只放了加法的全过程。}
+\begin{codeline}
+FUNCTION sum_of_two_number(num1, num2, result):
+    IF result is NULL OR num1.digit is 0 OR num2.digit is 0 OR
+       num1.digits is NULL OR num2.digits is NULL THEN
+        RETURN failure
+    
+    IF num1 is positive && num2 is negative THEN
+        RETURN sub_of_two_number(num1, -num2, result)
+    ELSE IF num1 is negative && num2 is positive THEN
+        RETURN sub_of_two_number(num2, -num1, result)
+    
+    IF num1.exponent < num2.exponent THEN
+        SWAP num1 and num2
+    
+    Create enlarged_num1.digits = num1.digit+num1.exponent-num2.exponent
+    enlarged_num1.exponent = num2.exponent
+    enlarged_num1.sign = num1.sign
+    
+    Enlarge num1.digits to enlarged_num1.digits
+    Fill remaining positions with 0
+    
+    sum_of_two_integer(enlarged_num1, num2, result)
+    result.exponent = num2.exponent
+
+    Deal with trailing zeros
+    RETURN success
+END FUNCTION
+\end{codeline}
+
+\begin{codeline}
+FUNCTION sum_of_two_integer(num1, num2, result)
+    IF result is NULL OR either number has no digits/memory THEN
+        RETURN failure
+    
+    both_negative = (num1.sign == negative AND num2.sign == negative)
+    
+    IF (both numbers are positive) OR (both_negative) THEN
+        IF num1.digit < num2.digit THEN
+            SWAP(num1, num2)
+        
+        result = {{0,0,...,0},num1.digit+1,0,both_negative}
+        
+        FOR i = 0 to num1.digit-1 DO
+            result.digits[i+1] = num1.digits[i]
+        
+        FOR i = num2.digit-1 downto 0 DO
+            position = num1.digit - num2.digit + i + 1
+            result.digits[position] += num2.digits[i]
+            
+            IF result.digits[position] >= 10 THEN
+                result.digits[position] -= 10
+                result.digits[position-1]++
+
+        FOR i = num1.digit-1 downto 1 DO
+            IF result.digits[i] >= 10 THEN
+                result.digits[i] -= 10
+                result.digits[i-1]++
+  
+        IF result.digits[0] == 0 THEN
+            SHIFT all elements left by 1
+            result.digit--
+            RESIZE result.digits to new size
+        
+        RETURN success
+    ELSE
+        IF num1.sign == negative THEN
+            // -a + b = b - a
+            num1.sign = positive
+            RETURN sub_of_two_integer(num2, num1, result)
+        ELSE
+            // a + (-b) = a - b
+            num2.sign = positive
+            RETURN sub_of_two_integer(num1, num2, result)
+END FUNCTION
+\end{codeline}
+\subsection{乘法算法}
+\subsubsection{原理}
+对于$a_1,a_2$，我们有：
+\[
+a_1 = m_1 \times 10^{n_1} , a_2 = m_2 \times 10^{n_2}
+\]
+\[
+a_1 \times a_2 = (m_1  \times m_2) \times 10^{n_1+n2}
+\]因此对于m部分，我们只用需要计算两个整数的乘积。而指数部分，则直接相加即可。
+
+
+如何相乘m部分呢？快速傅里叶变换（$FFT$）是一个好选择，可以在$O(nlogn)$的时间复杂度内计算完两个位数为n的乘积，但是由于时间原因，我真的没有足够的时间进行这种方法的移植了，因此这里采用的是列式计算，时间复杂度为$O(n^2)$。
+
+
+假设$m_1 = 456, m_2 = 789$,两个数字的位数均为3，我们建立一个长度为$m_1.digit+m_2.digit = 6$的int数组(不用char防止溢出)。然后根据下列公式计算新数组的每一项：
+$$
+\text{cal}[k] = \sum_{i+j=k} \text{num1.digits}[\text{num1.digit} - i - 1] \times \text{num2.digits}[\text{num2.digit} - j - 1]
+$$
+$$
+\quad (where\quad k \in \{0,1,\dots,m_1.digit+m_2.digit-2\},i\in \{0,1,\dots,m_1.digit\},j\in \{0,1,\dots,m_2.digit\})
+$$
+用可见的竖式来表示计算过程：(这里latex排版太困难，能理解意思就行)
+\[
+\begin{array}{r@{\quad}l}
+      & 4\quad 5\quad6 \\
+\times & 7\quad 8\quad9 \\
+\hline
+ 36 \quad 45 \quad 54 \quad \\
+ \quad 32 \quad 40 \quad 48 \quad 0000 \\
+\quad \quad 28 \quad 35 \quad 42 \quad 000\quad 000 \\
+\hline
+ 0\quad28 \quad 67\quad 118 \quad 93 \quad 54 \
+\end{array}
+\]
+我们获得了相乘后的数组$[0,28,67,118,93,54]$
+
+
+随后从尾项开始将大于10的位数移植到前一位（对当前位进行对10的取余，同时前一位加上本位/10的整数部分）：
+$$Step 1:[0,28,67,118,98,4]$$
+$$Step 2:[0,28,67,127,8,4]$$
+$$Step 3:[0,28,79,7,8,4]$$
+$$Step 4:[0,35,9,7,8,4]$$
+$$Step 5:[3,5,9,7,8,4]$$
+至此，我们成功的获取了$m_1 = 456, m_2 = 789$的乘积，并将他们按位保存，符合数字构造结构。
+\subsubsection{伪代码实现}
+\begin{codeline}
+    FUNCTION multiply_of_two_number(num1, num2, result)
+    IF result is NULL OR num1.digit is 0 OR num2.digit is 0 OR
+       num1.digits is NULL OR num2.digits is NULL THEN
+        RETURN failure
+    
+    result = {{0,0,...,0},num1.digit + num2.digit,0,0}
+    result.sign = num1.sign XOR num2.sign 
+    result.exponent = num1.exponent + num2.exponent
+   
+    IF memory allocation failed THEN
+        RETURN failure
+
+    cal = ALLOCATE_MEMORY(result.digit * sizeof(int))
+    IF memory allocation failed THEN
+        FREE(result.digits)
+        RETURN failure
+    
+    FOR i = 0 to result.digit - 1 DO
+        cal[i] = 0
+    
+    FOR i = 0 to num1.digit - 1 DO
+        FOR j = 0 to num2.digit - 1 DO
+            cal[i + j] += num1.digits[num1.digit - i - 1] * 
+                          num2.digits[num2.digit - j - 1]
+    
+    FOR i = 0 to result.digit - 2 DO
+        IF cal[i] >= 10 THEN
+            cal[i+1] += cal[i] / 10
+            cal[i] = cal[i] MOD 10
+    
+    FOR i = 0 to result.digit - 1 DO
+        result.digits[i] = cal[result.digit - i - 1]
+    
+    IF result.digits[0] = 0 THEN
+        SHIFT all digits one position left
+        result.digit -= 1
+        RESIZE result.digits to new size
+    
+    FREE(cal)
+    RETURN success
+END FUNCTION
+\end{codeline}
+
+
+\subsection{除法算法}
+\subsubsection{原理}
+计算 $a_1\div a_2$非常棘手。我们知道，除法可以理解成$a_1 \times a_2^{-1}$。由于前面我们已经对乘法进行了移植，所以我们的问题就转换成了如何求$a_2^{-1}$。
+求解$a_2^{-1}$，我们可以假设$a_2^{-1}=x,\quad \frac{1}{x}=a_2$;令：
+$$
+f(x) = \frac{1}{x} - a
+$$
+则我们的问题转换成了求解$f(x) = 0$，有牛顿迭代公式：
+$$
+x_{n+1} =x_n - \frac{f(x_n)}{f'(x_n)}= (2 - a_2 x_n) x_n
+$$
+牛顿迭代法必须要有一个初值$x_0$，我们注意到：$a_2^{-1}$已经有一个现成的，比较接近的解了：
+$$a_2^{-1} \approx -a_2.exponent - a_2.digit $$
+因此，我们直接令
+$$x_0 = 1 \times 10^{-a_2.exponent - a_2.digit}$$
+代码上可以这样实现：
+$$x_0.digits [0] =1,x_0.digit=1,x_0.exponent= (-a_2.exponent - a_2.digit),x_0.sign = 0;$$
+
+
+然后接踵而至的第二个问题：要迭代多少次？我们可以观察求解$3^{-1}$收敛速度：
+\begin{commandline}
+    0.17
+    0.2533
+    0.31411733
+    0.3322255689810133
+    0.33332965190775252026451231566933
+    0.3333333332926746504121388099953808712479003930615686205...
+    0.3333333333333333333283739478426746276802989752908889214...
+    0.3333333333333333333333333333333333333335468999506148499...
+\end{commandline}
+注意到，精确位数以$2^n$的速度增加，所以说我们只需要计算
+$$log_2(precision) + C \text{次}$$
+这里的C是一个常数，由于我们的$a_2^{-1}$的初始近似解$x_0$可能距离$a_2$非常接近，也有可能相差接近十倍，所以达到对应精度所需要的迭代次数不同。假设极限情况相差十倍，为了达到对应进度则需要多迭代$log_210 \approx 3.3$次，因此此处C = 4。
+
+
+同时，注意到最后四次迭代后，数字位数会达到 $16 \times precision$位，当precision很大的时候会有很多冗杂的计算。因此最后四次迭代中：每次迭代后将存储的位数缩减为前$precision +1$位，以为了更快的计算。多预留的一位是为了四舍五入获取更加精确的结果。因此，本除法时间复杂度为$O(n^2log_n)$，如果乘法使用FFT则可以降低为$O(n(logn)^2)$
+
+\subsubsection{伪代码实现}
+\begin{codeline}
+    FUNCTION divide_of_two_number(num1, num2, result):
+    IF result is NULL OR num1.digit is 0 OR num2.digit is 0 OR 
+       num1.digits is NULL OR num2.digits is NULL THEN
+        RETURN failure
+    
+    sign = (num1.sign XOR num2.sign) 
+    num1.sign,num2.sign = 0
+    result.exponent = num1.exponent - num2.exponent
+    
+    FOR i = 0 TO num2.digit - 1 DO
+        IF num2.digits[i] != 0 THEN
+            BREAK
+        IF i == num2.digit - 1 THEN
+            RETURN division_by_zero (-1)
+    END FOR
+    
+    inverse_num2 = {{1}, 0, -num2.exponent - num2.digit,0}
+    number_2 = {{2},0,0,0}
+    
+    loops = CEILING(log(precision)/log(2) + 4)
+    
+    FOR i = 0 TO loops - 1 DO
+        multiply_of_two_number(inverse_num2, num2, &temp) IF Fail THEN
+            CLEANUP_AND_RETURN failure
+            
+        sub_of_two_number(number_2, temp, &temp2) IF Fail THEN
+            CLEANUP_AND_RETURN failure
+            
+         multiply_of_two_number(temp2, inverse_num2, &next_solution)IF Fail
+            CLEANUP_AND_RETURN failure
+        
+        // For final iterations, reduce digits to prevent excessive growth
+        IF i > loops - 4 THEN
+            new_digit = (next_solution.digit + 1) / 2
+            IF new_digit > 0 THEN
+                Truncate next_solution to new_digit digits
+                next_solution.exponent += next_solution.digit - new_digit
+                next_solution.digit = new_digit
+            END IF
+        END IF
+        
+        DESTROY(temp)
+        DESTROY(temp2)
+        DESTROY(inverse_num2)
+        inverse_num2 = next_solution
+        next_solution.digits = NULL 
+    END FOR
+    
+    multiply_of_two_number(num1, inverse_num2, result)  IF Fail THEN
+        CLEANUP_AND_RETURN failure
+    
+    count = result.digit
+    precision_install(result) //round off here
+    result.exponent += count - result.digit
+    result.sign = sign
+    
+    DESTROY(inverse_num2)
+    DESTROY(number_2)
+    RETURN success
+END FUNCTION
+\end{codeline}
+
+\subsection{开方算法}
+\subsubsection{原理}
+开方运算也可以用牛顿迭代法计算。由于直接用牛顿迭代法计算$\sqrt{a}$会涉及到本身就是用牛顿迭代计算的除法，如果再在其基础上运行新的一轮牛顿迭代法运行时间会变得无法接受。优化后，问题变成原理为求解$\frac{1}{\sqrt{a}}$，同理有：
+$$
+f(x)=\frac{1}{x^2}-a,\quad x_{n+1} = (1.5  -0.5\times a\times x_n)\times x_n
+$$
+更好注意的是；$\sqrt{a} \approx (a.exponent + a.digit)/2$，所以说对于初解$x_0 \approx 1\times 10^{-(a.exponent + a.digit)/2}$。但是我的存储结构中，指数不支持存储类似$3.5$的值，怎么办？这简单：
+    \[
+x_0 =
+\begin{cases}
+1\times 10^{-(a.exp + a.dig)/2}, & (a.exp + a.dig) mod2=0  \\ 
+3\times 10^{-(a.exp + a.dig+1)/2}, &  (a.exp + a.dig) mod2=1
+\end{cases}
+\]
+$$ Since:\quad10^{-0.5} * 3 \approx 1$$
+
+
+同样的，这次也要观察需要迭代多少次。举例计算$\sqrt{0.25}$的乘法逆元：
+\begin{commandline}
+    0.149875000
+    0.224391678808837890625000000000
+    0.3351752074906463987619093546531151710933045251294...
+    0.4980560120061639806905291251582462804087152222376...
+    0.7316405592227335976178730981702146098490072673288...
+    1.0485051312482834443600839236650276996168608841525...
+    1.4286717272029429947676203666212737952321021973829...
+    1.7784993393778637880314403614741943254206368111014...
+    1.9645615162092323285611845070444241497250887941323...
+    1.9990636487375062650527662787526566185022955008028...
+    1.9999993425373535974798188645696231203958687855931...
+    1.9999999999996758071869631607311179755129679964573...
+    1.9999999999999999999999999211742649814499930601877...
+\end{commandline}
+额，我们可以观察到精确位数以$2^n$的速度增加，但是算法的一开始显著得收敛的有点慢了，所以说这次的C需要取的比较大。根据多次尝试，发现$C=10$能够用最少的迭代次数完成几乎所有情况的收敛到指定位数。因此我们需要迭代：
+$$log_2(precision) + 10 \text{次}$$
+运行完牛顿迭代法后，我们获得了$\frac{1}{\sqrt{a}}$的精确值。最后调用除法$1 \div (\frac{1}{\sqrt{a}})$，就可以快速而且精确的计算出$\sqrt{a}$。
+由于伪代码和除法极其相似，原理都是牛顿迭代法，这里就不再放开方的伪代码，详情可以直接查看$calculator.c$中的$sqrtofnumber$函数。
+\subsection{指数计算}
+\subsubsection{原理}
+利用泰勒公式：
+\[
+e^x = \sum_{n=0}^{\infty} \frac{x^n}{n!} = 1 + \frac{x}{1!} + \frac{x^2}{2!} + \frac{x^3}{3!} + \frac{x^4}{4!} + \cdots
+\]
+移植泰勒公式的过程相对简单，问题是要迭代多少回？我设计的思路是：首先估计出$e^{num}$总共有多少位，然后根据当前precision，我们可以计算出能够容忍的最小误差。计算$e^{num}$有多少位，可以用：
+$$
+10^{num.exponent + num.digit - 1} * log_{10}e
+$$
+为了计算方便，直接取$log_{10}e=0.4342944819$。当计算的当前项小于$10^{e^{num}-precision-1}$时候，就结束泰勒公式的计算，因为余项肯定是小于误差范围内的。
+但是这样遇到了一个问题：例如计算$e^{50},precision=10$的时候：第一项是50，而误差允许是$10^{21-10-1}=10^{10}$。因此，第一项就退出了，这显然是不可接受的，因此我们必须人为框定最少循环次数。
+
+
+由于伪代码和除法较为相似，原理都是不断的累加数字，这里就不再放指数函数的伪代码，详情可以直接查看$calculator.c$中的$expofnumber$函数。
+\subsection{其他函数}
+如上述，我使用牛顿迭代法和泰勒展开实现了两种函数的移植，对于绝大多数函数如对数、三角、反三角函数，均可用套用现有方法进行移植。但由于时间有限，我没来得及完成对其他函数的移植，望理解。
+\section{我是怎么使用AI的}
+\subsection{引言}
+我认为承认使用AI并不是什么羞耻的事情。事实上，如果没有copilot的辅助，我这次project的完成难度将会提升不只一倍。在完成这个project的过程中，我甚至有想法说提议学校开设一门AI工具使用的通识课，因为它太强大了，而且会可见的未来更加强大。不会正确高效的使用AI，生产力就是显著低一档。
+\subsection{Copilot为什么是神}
+在进行GitHub学生认证后，我可以免费的使用Copilot Pro。因为Copilot高度嵌入VSCode，而且生成回答的时候会参考整个path下的所有文件，极其高效且准确。而使用其他AI则有很多复制粘贴源码的过程，而且精确程度肯定不及读了我放在path下$project1.pdf$的Copilot。本次Project我选用的Copilot内置模型是最新的$Claude 3.7$。
+\subsubsection{自动补全}
+场景：在计算过程中，可能$num.digits$数组后端会混入很多$0$。由于我们加减乘除的效率和数组长度直接挂钩，为了计算效率，可以消除$num.digits$的尾端连续的'0'。同时为了保证数字不变，要对$num.exponent$进行加的操作。在最后，我忘记了如何调用挪数组方法，但Copilot能够理解我在干什么并自动补齐：
+\begin{commandline}
+    WHILE True DO
+        IF result.digits[pointer] == 0 THEN
+            count = count + 1
+            pointer = pointer - 1
+        ELSE
+            BREAK
+        END IF
+        
+        IF pointer == -1 THEN
+            result = {0}
+            RETURN success
+        END IF
+    END WHILE
+    
+    IF count == 0 THEN
+        RETURN success
+    END IF
+\end{commandline}
+马上Copilot补齐了以下：
+\begin{commandline}
+result->digit -= count;
+result->digits = realloc(result->digits, result->digit * sizeof(char));
+return 1;    
+\end{commandline}
+看着一般，而且没有我期望的$num.exponent+=count$。我选中这行代码，叫它检查是否有内存风险：
+\begin{commandline}
+    char* temp = realloc(result->digits, result->digit * sizeof(char));
+    if (temp == NULL) {
+      // Keep the original memory and report failure
+        return 0; // Memory allocation failed
+    }
+    result->digits = temp;
+    return 1;
+\end{commandline}
+嗯，我们就极其快速的调用了Copilot生成了我忘记的调库代码。由于Copilot高度嵌入VSCode，整个使用过程不会超过20s，我们只需要自己添上$num.exponent+=count$即可。
+\subsubsection{提升代码质量}
+我是C语言初学者，之前依靠Java度过了相对温柔的编程环境，即写代码不需要回收内存、变量都有一个默认的初始值和数组边界检查。一下子进入C语言的编程，确实很多时候会忘记这些事。但是我能借助Copilot的快速响应，动态的检查代码问题。例如：
+\begin{commandline}
+    1.Potential leak of memory pointed to by 'number 0p5.digits'[Ln 540, Col 48]
+    2.A non-void function does not return a value in all control paths [Ln 339,Col 1]
+    3.The left operand of'==' is a garbage value C/C+ +[Ln 935, Col 34]
+\end{commandline}
+嗯，敲完这个project的时候，\sout{虽然已经很小心的回收内存了}，但是Copilot给我扫出来了30多个Warning。在VSCode中，直接右键这个Warning，Copilot就可以自动帮我修复。VSCode似乎使用枚举的方式debug，右键后会详细的给出在什么条件下会出现这个问题，这的确是单靠我个人debug很难做到的事情：
+\begin{commandline}
+    1.To fix the potential memory leak, you need to free the memory allocated to inverse_num2.digits before returning. 
+    2.To fix the issue, ensure that the function is_valid_sqrt returns a value in all control paths. 
+    3.The problem is that the variable operator is not initialized before it is used in the comparison. To fix this, initialize operator to a default value.  -- char operator = ' ';
+\end{commandline}
+
+\subsubsection{latex/伪代码生成}
+在写项目报告之前，我可能总共接触latex时长不到半个小时，只感觉它是一个长得很像HTML的东西。但是想要追求精致的项目文档，我需要学习latex并做出一个像模像样的报告。这个时候，AI终于到了他最厉害的领域——超快速上手。
+
+
+
+首先，我选择了一个我比较喜欢的项目文档报告，将其下载并截取了其中关键的几页，喂给DeepSeek R1和OpenAI o3-mini，使用prompt：
+\begin{commandline}
+    试图逆向一下这个pdf的latex: (文件)
+\end{commandline}
+其中DeepSeek R1的尝试最成功，至少模仿了原报告的8成相貌，于是我直接将其作为本report的最基础模版部分。随后，写report的过程中想修改页面格式、插入数学公式和放置文本框等操作，我都不会！但是这种问题可以通过询问AI极其快速的解决。所以说我就借助AI的辅助，顺利的在几乎不会latex语法的背景下完成了这个report。下面是我的几次经典询问：
+\begin{commandline}
+    latex中如何在每个页头添加一个分割线并放一些信息？
+    如何调整latex行间距
+    latex如何用一个代码框展示文字
+    listing中，我希望代码块被灰底圆角矩形所包裹，用来提示这是命令行环境，该怎么写
+    latex中求和符号怎么打
+    latex中怎么敲出分类讨论的那个条
+    latex如何划掉文字
+    ......
+\end{commandline}
+同时，上述文档的伪代码部份，则是我在VSCode内置环境中，直接选定某一些行代码，直接叫Claude 3.7帮助我生成伪代码实现。最终效果还不错，我只是人工进行了一些微调，这无疑极大的节省了我的时间。
+\subsection{AI还做不到的地方}
+\subsubsection{超长思考}
+相信大家拿到project的第一时间就是直接喂给AI工具，虽然不寄予厚望，但是也希望生成一个大概的框架。我也尝试了使用DeepSeek R1-671B（采用了火山引擎提供的服务，最大支持15K输出），采用下列prompt进行了三次生成：
+
+
+\begin{codeline}
+    Now, Suppose that you are a C programmer, you are required to read 
+    the following documents, then try all you best to provide the whole
+    code with every function. Here’s the Document: 
+    *Reduced Document Context, deleted some unrelated things *
+\end{codeline}
+但遗憾的是，三次生成中，DeepSeek都是直接使用$long\quad long$存储整数类型，$(long)double$存储小数类型，然后直接调用了系统方法进行计算，并没有满足高精度的需求。
+
+\subsubsection{理解复杂结构}
+很多时候，我们并不需要成为制造轮子的人，而是在一个现有的体系下添砖加瓦。在移植乘法的时候。我想投机取巧的使用AI工具帮助我直接移植快速傅里叶变换。由于我的数据封装方式比较不同，所以说要写对FFT算法，必须理解我的封装结构。$DeepSeek,GPT-4o,Claude 3.7$都没有在第一轮回答中都提供了看似正确的答案，但没有任何代码通过了案例测试。由于我时间不足，而且我对傅里叶变换也只是了解基本原理水平，没有对AI工具进行更深入的问答debug环节，但这依旧说明了AI工具的对理解复杂结构的能力不足。
+
+\subsection{如何科学使用AI}
+目前来看，AI的最大作用就是能够替代部分简单劳动力，例如帮我生成一段简单的但容易忘记的代码、调库，帮我直接生成伪代码等。也能将几乎所有新入手事务的上手成本几乎降至零。
+根据Github Copilot Cookbook的指导，调用prompt的语句是一般都比较简短，例如“Simplify this code. Avoid using if/else chains but retain all function return values.”，\sout{并不需要让AI扮演成写不出好代码就被炒鱿鱼的程序员}。同时，目前我能接触到的LLM能力距离替代人类程序员尚有一段距离，至少说直接让AI生成某一个模块的代码，最后耗在Debug上的时间不见得会比我自己写短。因此，此时此刻，还是让AI做一些低智力附值的工作吧。
+\section{不足之处}
+首当其冲的效率方面，我没有用FFT算大数乘法，导致了后续一系列依附于乘法的功能速度都比较缓慢。
+
+
+其次，我的代码风格已经经过多次改善，而且附带了大量注释，但仍然有不小的提升空间，例如我还是习惯于写一串的if else条件，还需要更正。
+
+
+对于内存管理方面，我直接利用Copilot进行了内存管理的筛查，但本质上没有锻炼到我个人对内存管理的能力，日后还需自行提升。
+\section{结语}
+我是C语言和latex的初学者，这个看着略显简陋的Project和Report花费了我至少50+小时，包括前期自行学习C的语法，中期对C语言特性带来的问题进行漫长的调试，以及后期和AI对话写latex文档等。
+
+
+总的来说，这次Project实现的还算成功，确实实现了高精度的计算。在此之上还加入了精度调整功能和指数函数，也感谢Monad为我的工作提供了很多思路，还在项目报告的语言上参考了Maystern的一些表述。而且与前几年报告不同的是，我主动的在报告中阐明了我是如何使用AI参与工作的。在DDL结束后，我也会将$calculator.c$和$report.tex$源码一并上传到https://github.com/BrightonXX/SUSTech-CPP-Project。
+
+
+\textbf{感谢各位能读到这里。}
+\section*{References}
+\begin{thebibliography}{9}
+
+\bibitem{Monad2022} 
+Yan W.Q. \textit{CS205 Project2: A Better Calculator}. 
+Southern University of Science and Technology, 2022. 
+[Source code]. Available: 
+\href{https://github.com/YanWQ-monad/SUSTech_CS205_Projects/tree/master/Project2_CalculatorEx}{github.com/YanWQ-monad/CS205\_Project2} 
+
+\bibitem{Maystern2022} 
+Maystern \textit{CS205 Project2: A Better Calculator}. 
+Southern University of Science and Technology, 2022. 
+[Source code]. Available: 
+\href{https://github.com/Maystern/SUSTech_CS205_Cpp_Projects/tree/main/Project02_a-better-calculator}{github.com/Maystern/CS205\_Project2} 
+
+\bibitem{copilot2025} 
+GitHub. \textit{Copilot Chat Cookbook}. 
+Documentation, 2025. 
+Available: 
+\href{https://docs.github.com/en/copilot/copilot-chat-cookbook}{docs.github.com/copilot-cookbook} 
+
+\end{thebibliography}
+\end{document}
