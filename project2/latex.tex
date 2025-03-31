@@ -1,0 +1,641 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{setspace}
+\usepackage[hidelinks]{hyperref}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[most]{tcolorbox} % 加载 tcolorbox 及其 listings 库
+\definecolor{bgcolor}{RGB}{230,230,230}
+\definecolor{bgcolor2}{RGB}{240,230,240}
+\definecolor{licolor}{RGB}{100,100,100}
+\linespread{1.2} 
+\usepackage{algorithmic}
+\usepackage[a4paper, left=2.5cm, right=2.5cm, top=3cm, bottom=2.5cm]{geometry}
+\usepackage{ctex} 
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\lhead{\textbf{Brighton}}
+\chead{Dot Product of Vectors}
+\rhead{CS219 Project2}
+
+\newtcblisting{commandline}{
+  breakable,                     % 允许代码块跨页
+  colback=bgcolor,               % 背景色为灰色
+  colframe=licolor,              % 边框色同背景色（若想显示
+  listing only,
+  arc=5mm,                       % 设置圆角半径
+  boxrule=1pt,                   % 不显示边框线，如需要可调大此数值
+  left=6pt, right=6pt, top=6pt, bottom=6pt, % 设置内边距
+}
+\newtcblisting{codeline}{
+  breakable,                     
+  colback=bgcolor2,               
+  colframe=licolor,              
+  listing only,                  
+  arc=5mm,                       
+  boxrule=1pt,                   
+  left=3pt, right=3pt, top=3pt, bottom=3pt, 
+  listing options={
+    basicstyle=\ttfamily\fontsize{10pt}{11pt}\selectfont,         % 代码字体
+    language=bash,                
+    showstringspaces=false,       
+    aboveskip=2mm, belowskip=2mm, % 上下间距
+    columns=flexible,             % 让字体对齐
+    keepspaces=true,
+    escapeinside={(*@}{@*)},      % 允许使用 LaTeX 命令
+    numbers=none,
+    frame=none,
+  },
+  before=\setstretch{0.8},        % 设置行间距 1.5 倍
+}
+
+\title{\textbf{Computing the Dot Product of Two Vectors}}
+\author{} % 清空默认作者区
+\date{}   % 清空默认日期区
+
+% 自定义标题布局
+\makeatletter
+\renewcommand{\maketitle}{
+  \begin{center}
+    {\LARGE \@title \par} % 标题
+    \vspace{1em}
+    \textbf{\@author}     % 原作者区（可保留）
+    \vspace{1em}
+    \begin{tabular}{ll}
+      Student ID: & 12312710 \\
+      Name:       & 胥熠/Brighton \\
+      Course:     & CS219: Advanced Programming \\
+      Date:       & \today
+    \end{tabular}
+    \vspace{0.5em}
+    \hrule height 0.8pt % 分隔线
+  \end{center}
+}
+\makeatother
+
+\begin{document}
+\thispagestyle{empty}
+\maketitle
+
+{
+\setstretch{1.2}
+\tableofcontents
+}
+\vspace{2em}
+\section{前言}
+无论是上Java课，还是C/C++课，我们都被灌输Java就是要比C慢的一种理念。但真的是这样吗？在完成这个Project的过程中我的理解被一次次的击碎，那自称快的C怎么在某些场景会被Java拉开好几倍的速度差距？为了探索这个问题，我们必须了解C语言和Java的底层原理和为了加快程序运行速度采取的手段。同时，在这个探索过程中真正的理解C和Java这两种语言实现方式的根本差距。
+
+\section{需求分析}
+\subsection{点乘实现}
+我们在初中就学过，向量$A$点乘向量$B$有：
+$$A \cdot B = \sum A_i \times B_i$$
+该算法的时间复杂度为O(n)，且不存在进一步降低时间复杂度的可能。在这里，我们使用两个数组分别储存在两个数组中，使用for循环计算乘积并加到result中。
+
+
+在这个实验中，我并不在意result的精度和溢出问题，我们只关注整个算法中乘法和加法的速度。但是我们必须要将乘积加到result中并最后打印result，否则会在某些优化中整个算法被优化而无法实验。
+
+\subsection{如何记录时间？}
+既然要比较两个不同语言的处理速度，我们需要有一个精准记录时间的手段。Java比较方便，直接调用System.nanoTime()就可以了。但是C语言中有个陷阱，\textbf{$clock()$ 测量的是CPU时间，而不是时钟时间（wall-clock time）}。在多线程或高负载系统下，CPU时间和实际经过的时间会有差异。所以为了精确的记录时间，我们肯定不能用这个不稳定的clock()函数。同时，我还想要计数方法能够跨平台，于是，我找到了可以用以下方法实现：
+
+\begin{codeline}
+#ifdef _WIN32
+    #include <Windows.h>
+    typedef LARGE_INTEGER TimePoint;
+    void get_time(TimePoint *t) {
+        QueryPerformanceCounter(t);
+    }
+    double time_diff_seconds(TimePoint start, TimePoint end) {
+        LARGE_INTEGER freq;
+        QueryPerformanceFrequency(&freq);
+        return ((double)(end.QuadPart - start.QuadPart)) / freq.QuadPart;
+    }
+#else
+    #include <time.h>
+    #include <stdio.h>
+    typedef struct timespec TimePoint;
+    void get_time(TimePoint *t) {
+        clock_gettime(CLOCK_MONOTONIC, t);
+    }
+    double time_diff_seconds(TimePoint start, TimePoint end) {
+        return (end.tv_sec - start.tv_sec) + 
+               (end.tv_nsec - start.tv_nsec) / 1000000000.0;
+    }
+#endif
+\end{codeline}
+这个代码先是检测了运行环境，然后按不同的系统分别实现了能够精确计算经过时间的方法。在Windows系统下，我们直接利用Windows.h库下面的QueryPerformaceCounter方法，而Linux下则是使用time.h库。有了这个之后，我们就可以方便且准确的记录程序运行时间了。
+
+\subsection{向量从哪里来？}
+\subsubsection{采用预文件读取还是现场生成？}
+本Project和两个矩阵相乘有所不同，两个向量相乘的时间复杂度就是$O(n)$，非常快速。如果是使用文件IO的形式，读取文件速度可能会稍微慢，而且如前面所言有个问题——我的计算机很快，计算两个100000000（一亿）int类型的向量点积只需要大约2~3秒，而两个一亿int数组按每个数字十个字节算的话要占用接近2GB的空间！于是我在项目的一开始就决定了每次都现场生成随机数后点积，既节省了磁盘空间还省去了文件读取的繁琐，随生成随测。
+
+\subsubsection{如何快速生成随机数？}
+随之而来的一个问题，如何生成随机数？直接使用C或者Java内置的random函数固然方便，但是在Windows系统下，C的rand()生成数字范围只有0-32767。还有一个问题：有点慢。在这里，我们采用xorshift的随机方法，能够加速随机数的生成速度，而且生成范围可以覆盖指定的数据类型。
+
+
+在2*100,000,000（两亿）的数据规模下，两个方法的速度三次取平均值对比：
+
+
+C语言（直接使用gcc编译，不采用优化）：
+
+\begin{codeline}
+    unsigned int xorshift32() {
+    xorshift_state ^= xorshift_state << 13;
+    xorshift_state ^= xorshift_state >> 17;
+    xorshift_state ^= xorshift_state << 5;
+    return xorshift_state;
+}
+...
+for (int i = 0; i < size; i++) {
+        a[i] = xorshift32();
+        b[i] = xorshift32();
+}
+\end{codeline}
+使用XORShift：(2.314432 + 2.263346 + 2.481049)/3 = 2.35294s
+使用rand()：(3.181492 + 3.180839 + 3.225858)/3 = 3.19606s
+速度提升了35.84$\%$，时间减少了26.4$\%$。
+额，快的不是很多，但也算提升了吧。
+
+
+Java:
+\begin{codeline}
+    public static int xorshift32(){
+        xorshift32State ^= (xorshift32State << 13);
+        xorshift32State ^= (xorshift32State >> 17);
+        xorshift32State ^= (xorshift32State << 5);
+        return xorshift32State;
+}
+...
+for (int i = 0; i < size; i++) {
+            a[i] =  xorshift32();
+            b[i] =  xorshift32();
+}
+\end{codeline}
+使用XORShift：(0.567251 + 0.567911 + 0.568329)/3 =  0.567803s
+使用random.nextInt()：(3.497867 + 3.567083 + 3.440878)/3 = 3.50194s
+速度提升了193.41$\%$，时间减少了83.78$\%$！
+
+
+同时，C语言肯定快于Java的论点甚至在我设计实验的时候就破碎了。如你可见：在上述两个逻辑完全一致的XORShift中，生成2亿个随机数Java比C快了三倍有余！这是为什么呢？我们在后面在讨论。
+
+\subsubsection{XORShift会影响速度吗？}
+但是这又又衍生出来一个问题：两个同样都是int类型的数字相乘，但是一个范围在[0,32767]，一个范围在整个int表示范围，速度会有差异吗？我们也来做一下实验：
+
+
+直接用 100000000个样本计算一百次速度，为什么是一百次？因为这个数量就可以使用中心极限定理将近似看成正态分布了：
+我们可以运用在工程概率统计中的Welch's t-test计算两个方法时间是否可以被认为相同，详细数据见附录：
+
+
+Python:
+\begin{commandline}
+import scipy.stats as stats
+xor = [*数据*]
+ran = [*数据*]
+# Welch's t-test
+t_stat, p_value = stats.ttest_ind(xor, ran, equal_var=False)
+print(f"t = {t_stat:.2f}, p = {p_value:.3f}")
+# Cohen's d
+import numpy as np
+mean_diff = np.mean(xor) - np.mean(ran)
+pooled_std = np.sqrt((np.std(xor, ddof=1)**2 + np.std(ran, ddof=1)**2) / 2)
+cohens_d = mean_diff / pooled_std
+print(f"Cohen's d = {abs(cohens_d):.2f}")    
+\end{commandline}
+诶，奇怪的来了，设零假设为两种方法最后计算点积速度相同，我们计算出来的p值为0.037，拒绝了零假设！也就是说我们有96.6$\%$的把握，用xor生成出来的范围更大的数，进行点积速度还会比小范围的数还要快！我觉得这有点反直觉，因为两个更大的数相乘怎么会更加快呢。我发现，ran中有几个极其极端的数据，有一个甚至接近平均值的两倍，这应该是问题数据，需要剔除。各剔除十个最大最小值后计算得： p= 0.217，在显著性水平α = 0.05下可以说无显著差异了。
+
+
+通过查询得知，​C语言编译后使用CPU通过二进制乘法指令（如mul或imul。在CPU中，可能又直接用组合逻辑电路或者Carry-Save Adder等获取乘积结果。总而言之，只要是int类型整数，无论里面存的数无论大还是小，乘法操作并不会优化，32位都要参与运算（除非除以一些常数如2的幂，编译器可能会优化成位运算）。这似乎告诉我们选择数据类型需要更加谨慎，能用short甚至char的就不要用int了。对于浮点数，同时我也查阅了IEEE754标准，“对于所有浮点数，无论数值的大小如何，其内部表示均严格遵循上述格式”，因此处理数字的时候，无论数值大小如何，CPU内部读取和操作的都是固定长度的数据字，也是按照固定的算法计算。同时，在Java虚拟机的计算中，于是，后面的计算中，我会直接大量的使用xor方法生成随机数——\textbf{\textit{反正不会影响计算速度}}。
+
+
+\section{正式实验}
+\subsection{运行环境}
+Lenovo Legion Y9000P运行x86下的Windows 11, 使用Intel i9-13900HX，24GB DDR5运存。运行前保证CPU负载不超过20$\%$，同时内存余量大于10GB。
+
+\subsection{实验使用的软件}
+在Windows系统中，C语言程序使用Powershell，使用下列代码编译和运行：
+\begin{commandline}
+PS *path*> gcc -o dotproduct dotproduct.c
+        或者 gcc -O3 dotproduct.c -o dotproduct
+PS *path*> ./dotproduct
+\end{commandline}
+如果是较老版本linux系统，则需要在gcc后面加入$-lrt$链接到实时库。
+
+
+而对于反汇编C语言机器码到汇编代码，我们在同环境运行如下：
+\begin{commandline}
+PS *path*> gcc -g -o dotproduct dotproduct.c
+PS *path*> objdump -d dotproduct.exe > code.txt
+\end{commandline}
+随后我们就可以在同目录中code.txt查看机器码了。
+
+
+Java语言程序则在Powershell中，使用下列代码编译和运行，'X'为0-5的某个整数：
+\begin{commandline}
+PS *path*> javac Dotproduct.java
+PS *path*> java Dotproduct
+        或者 java XX:TieredStopAtLevel='X' Dotproduct
+\end{commandline}
+
+在两亿乘两亿的数据量下不会产生heap out of memory error的问题，因此不用特意的调整JVM堆的大小。
+
+
+观测软件方面，我们使用Intel VTune Profiler，主要用于观察程序性能瓶颈以及采取各种优化手段后的Bound的改变。
+\subsection{实验数据1—Java vs 无优化C}
+如果没有很极限的性能需求下，其实我们一般不会特意的使用编译器的优化功能。这个实验数据的目的就是为了测试一下普通情况下，Java和C的差距。下面五张图片分别代表了五种不同数据类型下，面对不同数据规模，Java与C的运行速度变化曲线和对比：
+
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{c0int.png}
+  \caption{int数据类型}
+  \label{fig:example}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{c0float.png}
+  \caption{float数据类型}
+  \label{fig:example}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+ \includegraphics[width=0.8\textwidth]{c0double.png}
+  \caption{double数据类型}
+  \label{fig:example}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{c0char.png}
+  \caption{char数据类型}
+  \label{fig:example}
+\end{figure}
+
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{c0short.png}
+  \caption{short数据类型}
+  \label{fig:example}
+\end{figure}
+
+
+我们发现了一些有趣的事实。首先对C程序来说，随着数据规模的扩大十倍，相应的消耗的时间也扩大成原来的十倍，图上也可以看出来呈现的是相对线性的关系，这符合我们的预期。计算线性拟合的$R^2$发现对于所有的数据，$R^2>0.99$，非常接近完美的线性关系。同时对于C,不同数据类型计算速度差不多是$double\approx  float > int\approx short \approx char$ ，数据类型的之间相差的速度其实比较小，可能也就30$\%$。造成差距的原因也很好解释，float和double调用的都是CPU中的Floating Point Unit，而整数类型调用的ALU。为什么char比int从数据位数上来看少四倍，但是最终时间相似？现在CPU的ALU基本都是面向32位计算和64位计算，char和short底层运算可能是和int同一套逻辑。就算不共享一套逻辑，32位ALU一次计算可能也只用一个clock，已经到速度的极限了。
+
+
+但是Java程序就稍微有点反常了，首先，他的时间好像不是那么的线性。数据规模增大十倍，它的运行时间有的时候翻10倍左右，有的时候就只翻一两倍，肯定不是简单的线性关系。总体来说对不同的数据类型速度有$double \approx float > short \approx char >= int$，数据类型之间的差距依旧比较小，原因和C有点相似。唯一不同的是这次char甚至比int还要慢一点，这是因为执行short和char的时候JVM会将他们提升到int，这个转换过程还会消耗一点时间。
+
+
+在一开始的时候，Java是要缓慢比C慢不少的，但是随着数据规模的扩大，最后的速度比C快很多倍！
+
+\subsection{实验数据2—Java vs O3优化C}
+\textbf{\textit{我无法接受Java居然会比C快的事实，这对我的世界观冲击太大了}}。为了重振C，在使用gcc的时候我们可以选择优化等级。分别有O1/2/3/fast选项，优化等级逐级提升而且逐级变得极端，到了Ofast甚至还会忽视一些constraints。
+
+
+在速度提升方面，真的会有效果吗？我们来做个实验，这次我们采用O3优化，即常规优化的最高等级，并且直接采用int数据类型，因为其他的数据类型在上面的实验可以看出本质上是大同小异的：
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{c3int.png}
+  \caption{O3优化, int数据类型}
+  \label{fig:example}
+\end{figure}
+O3程序的运行时间增长依旧比较符合线性关系，说明O3优化没有对时间复杂度方面做出什么调整。但是惊人的是，在O3优化等级下，无论是生成随机数，还是乘积的速度直接提升了几倍！O3编译器为什么可以让程序跑这么快？同时，注意到数据量变得非常巨大的时候，Java甚至以微弱的优势再次战胜了O3优化的C，JVM做了什么可以让程序跑这么快？
+
+\section{性能分析}
+\subsection{编译器神力—O3优化干了什么}
+\subsubsection{逆向代码分析}
+我们用指令objdump -d program指令观察一下编译后的，未经优化和优化后的代码有什么区别（为了读取方便，我这里采用了简化版程序）：
+
+
+在不进行gcc优化前的部分函数:
+\begin{commandline}
+    操作1：XORShift最后一步，左移五位，取异或后返回函数值
+401588: c1 e0 05              shl    \$0x5,%eax            ; 左移5位
+40158b: 89 c2                 mov    %eax,%edx           ; 复制到EDX
+40158d: 8b 05 7d 1a 00 00     mov    0x1a7d(%rip),%eax   ; 加载当前状态到EAX
+401593: 31 d0                 xor    %edx,%eax           ; EAX = EAX ^ EDX（第三次异或更新）
+401595: 89 05 75 1a 00 00     mov    %eax,0x1a75(%rip)   ; 最终状态写回内存
+40159b: 8b 05 6f 1a 00 00     mov    0x1a6f(%rip),%eax   ; 将最终状态加载到EAX（作为返回值）
+4015a1: c3                    retq                        ; 返回调用者
+\end{commandline}
+操作2：为数组中某个变量进行赋值
+\begin{commandline}
+4015e8: e8 63 ff ff ff        callq  401550 <xorshift32> ; 调用生成随机数（结果在EAX）
+4015ed: 89 c1                 mov    %eax,%ecx           ; 保存随机数到ECX
+4015ef: 8b 45 f4              mov    -0xc(%rbp),%eax    ; 加载i到EAX
+4015f2: 48 98                 cltq                       ; 扩展为64位索引
+4015f4: 48 8d 14 85 00 00 00  lea    0x0(,%rax,4),%rdx   ; RDX = i * 4（计算数组偏移）
+4015fb: 00 
+4015fc: 48 8b 45 e8           mov    -0x18(%rbp),%rax    ; 加载数组1基地址
+401600: 48 01 d0              add    %rdx,%rax            ; RAX = 数组1[i]的地址
+401603: 89 ca                 mov    %ecx,%edx           ; EDX = 随机数
+401605: 89 10                 mov    %edx,(%rax)         ; 数组1[i] = 随机数
+\end{commandline}
+
+操作3：点积计算
+\begin{commandline}
+401647: 8b 45 f0              mov    -0x10(%rbp),%eax   ; 加载j到EAX
+40164a: 48 98                 cltq                       ; 扩展为64位索引
+40164c: 48 8d 14 85 00 00 00  lea    0x0(,%rax,4),%rdx   ; RDX = j * 4
+401654: 48 8b 45 e8           mov    -0x18(%rbp),%rax   ; 加载数组1基地址
+401658: 48 01 d0              add    %rdx,%rax           ; RAX = 数组1[j]地址
+40165b: 8b 10                 mov    (%rax),%edx         ; EDX = 数组1[j]的值
+
+40165d: 8b 45 f0              mov    -0x10(%rbp),%eax   ; 加载j
+401660: 48 98                 cltq                       ; 扩展为64位索引
+401662: 48 8d 0c 85 00 00 00  lea    0x0(,%rax,4),%rcx   ; RCX = j * 4
+40166a: 48 8b 45 e0           mov    -0x20(%rbp),%rax   ; 加载数组2基地址
+40166e: 48 01 c8              add    %rcx,%rax           ; RAX = 数组2[j]地址
+401671: 8b 00                 mov    (%rax),%eax         ; EAX = 数组2[j]的值
+
+401673: 0f af c2              imul   %edx,%eax          ; EAX = EAX * EDX（有符号乘法）
+401676: 48 98                 cltq                       ; 扩展乘积到64位
+401678: 48 01 45 f8           add    %rax,-0x8(%rbp)     ; sum += 乘积
+40167c: 83 45 f0 01           addl   \$0x1,-0x10(%rbp)   ; j++
+
+\end{commandline}
+嗯，没有经过优化的汇编代码其实就是C语言的翻版而已，其指令序列与C源码保持高度对应。让我们来看看经过O3优化后的代码长什么样。
+
+
+指令： gcc -O3  x.c -o x，这里没有更进一步的采用-march=native因为这个指令生成的机器码是根据当前处理器架构再优化的，不够通用。 
+
+
+操作1：XORShift最后一步，左移五位，取异或后返回函数值
+\begin{commandline}
+401564: 89 d0                 mov    %edx,%eax           ; 转移结果到EAX
+401566: c1 e0 05              shl    \$0x5,%eax           ; EAX左移5位（优化：合并操作顺序）
+401569: 31 d0                 xor    %edx,%eax          ; EAX ^= EDX（第三次异或）
+40156b: 89 05 9f 1a 00 00     mov    %eax,0x1a9f(%rip)   ; 更新全局状态
+401571: c3                    retq                       ; 返回（删除冗余指令）
+\end{commandline}
+嗯，确实优化掉了几次move操作，而且删掉了最后写入内存的操作。
+
+
+操作2：为数组中某个变量进行赋值
+\begin{commandline}
+4015c3: 89 c2                 mov    %eax,%edx           ; EDX = 当前状态
+*省去详细： 左移13位 异或，右移17位 异或，左移5位 异或，复制结果到EDX*
+4015d8: 89 c2                 mov    %eax,%edx           ; 复制结果到EDX
+4015da: 89 04 8e              mov    %eax,(%rsi,%rcx,4)  ; 存储到数组1[i]
+\end{commandline}
+我们惊人发现，其实程序根本没有调用xorshift函数！而是直接内嵌进循环中了，这样可以减少跳转的开支，在两亿的数据量下，这个小小的跳转优化确实可以节省巨量的时间。
+
+
+操作3：点积计算。在搬运代码前有个趣事，我在简略版的代码中进行点积运算后，下一步直接free掉两个内存空间然后return跑路了。然后，我在O3优化后的汇编代码中找了好久，没有找到点积计算这一步。原来是O3看我根本没有使用sum，就干脆把乘积那个for循环直接删掉了。这是高效但危险的一步，高效在删除后确实没有影响运行结果，速度变快了；危险在在这种模式下会很难理解机器码，因为你根本不知道机器到底为了优化做了哪些极端的手段。
+
+
+\begin{commandline}
+401630: f3 0f 6f 14 06        movdqu (%rsi,%rax,1),%xmm2 ; 加载数组1[i:i+3]到XMM2
+401635: f3 0f 6f 1c 03        movdqu (%rbx,%rax,1),%xmm3 ; 加载数组2[i:i+3]到XMM3
+40163a: 48 83 c0 10           add    $0x10,%rax         ; 偏移量增加16字节（4个int）
+40163e: 66 0f 6f ca           movdqa %xmm2,%xmm1        ; 复制XMM2到XMM1
+401642: 66 0f 73 d2 20        psrlq  $0x20,%xmm2       ; XMM2右移32位（提取高32位）
+401647: 48 39 c2              cmp    %rax,%rdx          ; 检查是否处理完所有向量块
+40164a: 66 0f f4 cb           pmuludq %xmm3,%xmm1       ; XMM1 = 低32位乘积（数组1[i]*数组2[i]）
+40164e: 66 0f 73 d3 20        psrlq  $0x20,%xmm3       ; XMM3右移32位（提取高32位）
+401653: 66 0f f4 d3           pmuludq %xmm3,%xmm2       ; XMM2 = 高32位乘积
+401657: 66 0f 70 c1 08        pshufd $0x8,%xmm1,%xmm0  ; 重排结果：[低0,低2,0,0]
+40165c: 66 0f 6f cd           movdqa %xmm5,%xmm1        ; 初始化符号扩展掩码
+401660: 66 0f 70 d2 08        pshufd \$0x8,%xmm2,%xmm2  ; 重排结果：[高0,高2,0,0]
+401665: 66 0f 62 c2           punpckldq %xmm2,%xmm0    ; 合并低32位结果：[低0,高0,低2,高2]
+401669: 66 0f 66 c8           pcmpgtd %xmm0,%xmm1       ; 生成符号位掩码（处理有符号扩展）
+40166d: 66 0f 6f d0           movdqa %xmm0,%xmm2        ; 复制乘积结果
+401671: 66 0f 62 d1           punpckldq %xmm1,%xmm2    ; 低64位符号扩展
+401675: 66 0f d4 e2           paddq  %xmm2,%xmm4        ; 累加到XMM4（低64位和）
+401679: 66 0f 6a c1           punpckhdq %xmm1,%xmm0     ; 高64位符号扩展
+40167d: 66 0f d4 e0           paddq  %xmm0,%xmm4        ; 累加到XMM4（高64位和）
+401681: 75 ad                 jne    401630              ; 继续循环直到处理完所有向量块
+\end{commandline}
+呃呃，一头雾水，编译器在干什么？怎么把一行就搞定的for循环弄的这么复杂？我也是这个学期在学计组，里面实在太多高级指令了，我让AI解释一下吧：​
+\paragraph{1.SIMD并行计算：使用宽寄存器批量加载4个整数，通过PMULUDQ指令同时执行多组乘法，将4次标量计算合并为1次向量运算。哦，是某种高级的向量化加速！}
+\paragraph{​2.数据重组与累加：通过位移/重排指令分离高低位乘积，利用PADDQ实现64位有符号累加，避免溢出。额，这一条好像和效率没啥关系。}
+\paragraph{​3.循环展开与剩余处理：主循环每次处理4个元素，剩余元素用标量指令补充，最大化利用指令级并行和内存带宽。嗯，一次读四个元素确实可以利用内存带宽。}
+
+这确实体现了编译器极其强大的能力，我之前听说过什么编译器的优化水平秒杀99.9$\%$的程序员，这么看可能还真不夸张。
+
+\subsubsection{Profiler分析}
+只看汇编可不够，我们继续使用Intel VTune Profiler工具深入的分析：究竟在运行的时候，这些优化究竟带来了什么。
+
+
+首先，Inter VTune Profiler将分析结果分成了Performance-core和Efficient-core两种结果。这张图中有几个重要指标，我们着重分析各种Memory Bound，L1 Bound等限制运行速度的数据。
+
+
+我们知道：一个木桶能承多少水，由木桶最短的木板决定；一个程序能运行多块，由最慢的步骤决定。但是这个最慢的步骤是有理论下限的，例如DRAM的读写上限，CPU核心运算单元的上限等，而这些Bound就告诉了我们究竟是哪个因素是当前程序的最短板。
+
+
+对于我的向量点乘程序来说，两个大小为1亿的向量总共需要占据大约2GB的内存空间。我的测试设备配备了双通道DDR5 4800MT/s，理论吞吐上限为76.8GB/s。也就是说，理论内存的下限为26ms，程序不可能比这个程序更快。但是，我们注意到就算是O3优化的程序计算两个点乘也用了76ms，\textbf{也就是我们可以说如果速度没有逼近26ms的话，不应该有很多的Memory Bound。}同时，对于i9-13900HX来说，我没有找到Intel官方公布的L1,L2,L3 Cache的具体吞吐量数据。但一般来说，Cache速度是要比内存快的。也就是说，L1 Cache Bound也不应该很大，至少不应该比Memory Bound大。\textbf{如果L1 Cache Bound很大，说明程序在读取数据上面有很大的短板。}
+
+
+这分别是由Inter VTune Profile分析出的未经优化、O3优化的C程序计算2*1亿向量的报告：
+
+
+\begin{figure}[H]
+  \centering
+  % 第一个图片所在的区域，宽度设置为文本宽度的45%
+  \begin{minipage}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=1\textwidth]{c0analyze.png}
+   \caption{未经过优化}
+    \label{fig:image1}
+  \end{minipage}
+  \hfill % 用于在两图片之间插入间距
+  % 第二个图片所在的区域，宽度同样为45%
+  \begin{minipage}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=1\textwidth]{c3analyze.png}
+  \caption{O3优化}
+    \label{fig:image2}
+  \end{minipage}
+\end{figure}
+
+
+我们可以看到，对于没有经过优化的程序，最大的三个Bound分别为：
+
+$$Code Bound: 40.1\%, L1 Bound: 29.2\%, Memory Bound: 21.4\%$$
+
+说明未优化的代码在数据访问（尤其是 L1 缓存）和指令并行调度方面表现糟糕，CPU 大量周期在等待数据。这反映出来的问题是内存没有发挥其带宽优势，CPU也没有被高效的利用。
+
+
+而经过O3优化后的程序，这三个Bound分别变成：
+$$Memory Bound7.1\%,L1 Bound:6.9\%,Code Bound:52.0\%$$
+
+Code Bound变大了，说明核心瓶颈更多在算术执行段，我们充分的利用了CPU某一个核心的运算能力，这是我们期望的结果。这也验证了上面机器码中，O3优化一次加载4个元素的优化是实打实的提升了程序速度的。
+
+
+同时，我们注意到上述汇编将4次标量计算合并成了1次向量计算，以及直接砍掉调用XORShift函数直接将其移植到循环内部的优化。这样做的目的肯定是为了减少整体的Instruction数。同样是计算两个向量的点乘，未经优化的使用了254亿条指令，而O3优化后的只使用了98亿条，这也是一个非常大的优化。
+
+
+但有点可惜的是，两个程序的Total Thread Count都是1，GCC没有帮我进行多线程优化，如果有了多线程优化，程序速度还会翻上好几倍。
+
+
+
+\subsection{JVM神力—底层干了什么}
+\subsubsection{Java越跑越快，真的假的？}
+JVM是一个非常神奇的东西，其中一个神奇的特性就是Java程序越执行越快。
+
+
+在我们上面对比运行速度的时候，可以发现，java从一个数据规模跳到下一个数据规模的时候，不像C比较稳定的翻十倍。而是偶尔翻十倍，偶尔翻三四倍。口说无凭，我们依旧来做一下实验，这次我们用for循环五次，计算两个一百万int向量点乘，五次实验取平均值，看看速度的变化：
+
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{jit.png}
+  \caption{相同Java代码块运行时间}
+  \label{fig:example}
+\end{figure}
+
+
+可以看到，这里在第二次到第三次的转换中，明明都是计算同样的数据量，速度却加快了五倍多。Java真的越跑越快了，这到底是什么原因呢？
+
+\subsubsection{优化1：JIT热点代码优化}
+Java能够越跑越快的一个非常关键的要素就是JIT对热点代码的优化。什么是JIT? 全称是Just-In-Time Compiler，是JVM中自带的一部分。JIT通过方法调用计数器和loop-back-edge计数器，统计代码中某一块代码的运行次数。假如说某一段代码的运行次数达到了一个JIT的阈值，JIT就会针对热点代码进行编译和优化。
+
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{jvmPrecedure.png}
+  \caption{Java程序运行结构}
+  \label{fig:example}
+\end{figure}
+
+
+Java虚拟机中，存在功能不同的编译器。其中Client Compiler的设计目的是为了快速响应，用较低的编译开销和短的响应时间满足轻量级的应用。而Server Compiler的设计目的是为了性能，用更长的编译时间换取更高的优化效果。\textbf{类比来说，其实也就是GCC中开不开优化的区别。}而具体Server Compiler的编译优化过程，则与GCC不同，比较抽象的用了某种控制流和数据流结合的图数据结构。在JDK9后Server Compiler甚至还有两种，这里由于篇幅原因就不详细展开。
+
+
+但是又与C不同的是，在上图JVM其实是使用了叫Tiered Compilation的策略。这种策略先使用Client Compiler快速响应生成机器码，使程序能够快速响应。然后JIT监控方法的运行情况后，使用Server Compiler编译热点代码进一步的优化性能。这是一个非常聪明的策略，他可以同时保证程序响应快和程序效率高。
+
+
+同时，Java编译器也允许从一开始就使用$-XX:TieredStopAtLevel=X$指令实现类似GCC -Ox的编译层面优化。
+X数字越大，代表优化等级越高。X=0时候，代表程序通过解释器逐行解释执行，这样的好处就是响应快，坏处是性能差。当X=5的时候是直接使用Server Complier。我们分别采用不同X进行性能测试，看看优化程序究竟如何：
+
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\textwidth]{xxsmall.png}
+  \caption{数据量为100w时，不同优化等级运行时间}
+  \label{fig:example}
+\end{figure}
+
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\textwidth]{xxbig.png}
+  \caption{数据量为1000w时，不同优化等级运行时间}
+  \label{fig:example}
+\end{figure}
+
+
+可以看到，只要采用了优化，速度都比不采用优化快上好多倍。但是最高级的优化反而在数据量小（2*100W）的时候占据了下风，原因就是因为Server Compiler的响应速度并没有Client Complier快，在数据量小的时候还不如不优化。但一旦数据量大，运行时长显著长于响应时长的时候，Server Compiler的速度优势就逐渐显示出来了。
+
+\subsubsection{优化2：调度优化}
+搜索资料得知，JVM不会自动的把一个单线程任务改变成多线程，除此之外会不会有其他优化呢？这里，我们继续使用Intel VTune Profiler，用Java VisualVM捕获运行JVM进程的pid后，使用Profiler的Attach to Process功能捕获JVM的运行数据。由于捕获JVM的结果其实是并不是程序运行本身，而是套壳虚拟机后的结果，最终可能不能特别代表JIT优化本身，但也能获取不少数据。
+
+
+这里，我们捕获两个计算：计算100w和计算1000w（因为上图我们发现，JIT的优化大约在两百万次数左右开始起效），下面是我们的捕获结果：
+
+
+\begin{figure}[H]
+  \centering
+  % 第一个图片所在的区域，宽度设置为文本宽度的45%
+  \begin{minipage}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=1\textwidth]{JavaSmall.png}
+  \caption{数据量为100w时，Profiler报告}
+    \label{fig:image1}
+  \end{minipage}
+  \hfill % 用于在两图片之间插入间距
+  % 第二个图片所在的区域，宽度同样为45%
+  \begin{minipage}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=1\textwidth]{JavaBig.png}
+  \caption{数据量为1000w时，Profiler报告}
+    \label{fig:image2}
+  \end{minipage}
+\end{figure}
+
+
+首先我们发现了个比较巨大的改变，当数据量大的时候，E核直接不工作了！我一开始以为是测试有误，然后连续测试了几次之后，E核依旧不工作。我不太清楚这是系统层面的调度还是JVM层面的优化。但这确实我们发现了JVM在JIT以外的优化。同时我们观察到，当数据量大的时候，Code Bound的确从$25.0\%$提升到了$37.5\%$，这是我们希望看到的结果，也说明了JIT对热点代码的优化确实提升了CPU的使用率。
+\subsection{C真的比Java快吗}
+C比Java快，对也不对。我们发现，O3优化在数据规模为2亿的情况下被Java以微小的差距反超了。这其实并不代表Java语言运行的就比C更加快。事实上根据Profiler给出的Instruction量来看，C语言的程序使用的Instruction数是98亿，而Java是46亿。说明了但从单指令速度来看，C语言还是要更快的，只不过JVM内部可能采用的优化策略更加激进。所以说，我们不能一棒子敲死Java慢，毕竟现在JVM确实已经进化到了一个非常智能的水平了。
+
+\section{AI辅助了哪些工作}
+在这次Project我依旧按照惯例，简单阐述一下我在这个Project中在哪里让AI参与了我的工作。
+\subsection{将C转换成Java}
+我在一开始按照大概需求用C语言写好了测试程序，但是在测试的时候意识到还要将同样的逻辑用Java写一遍，非常没有意义而且麻烦。但是没有关系，Copilot Cookbook恰巧给出了对应prompt:"Tell me how I can convert this C Program to Java. The functionality and output of the new script should be exactly the same as the existing one."。然后将程序丢给Copilot，1分钟结束，转换结果无可挑剔。
+\subsection{Python统计数据程序生成}
+上述所有统计图，和T-test均是由Copilot内置的4-o生成的Python程序绘制。我使用的prompt为：
+\begin{codeline}
+我现在需要绘制一个条形图，目的是对比int数据类型下C和Java计算速度。
+数据大小...转换成毫秒再画图，不要预设数据，我要现场命令行输入的数据。
+画一条线以示意这个算法的时间复杂度符合O(n)。时间轴不要用线性轴，差距有数万倍。
+...
+现在，需求稍微变化了一点，要求再增加一个O3优化后的C速度对比。
+现在需求稍微改变了，我现在在测试Java不同'-XX:TieredStopAtLevel的速度...
+\end{codeline}
+我用极短的时间就获得了所有正确的绘图Python，并且这个流程已经深度嵌入我的其他工作流程。
+\subsection{解释汇编代码}
+上述逆向exe文件后获取的汇编码后面的中文注释，全部由DeepSeek R1生成。流程如下：
+\begin{codeline}
+    逐行的解释这个汇编码： *代码*
+    不要偷懒，逐行解释每一行。
+    你做的很好，现在按照上面的规格再对这个经过O3级别优化的汇编码解释：
+    那int_dot_product的乘积循环呢？（其实这里被O3优化掉了，R1精准的指了出来）
+    我修改了一下源码，现在有了。再次按照上面的规格对这个汇编码进行逐行解读。
+    展开讲讲编译器究竟是怎么使用SIMD指令提升计算性能的
+    详细展开讲讲编译器是怎么加快这个向量点积运算的，我需要技术细节
+    用大约两三句话核心的概括这个的优化逻辑或方法（生成内容为上述点积优化解释）
+\end{codeline}
+就算计算机组成原理学的再好，O3优化后的汇编代码也并非正常人能轻易读懂。这里我们合情合理的运用AI解读汇编代码，事实上他确实做的非常漂亮，加了中文注释后我们的确能够轻松理解O3在干什么了。
+\subsection{Latex快速模仿}
+介于我已经有了现成的Project1的模版，这次Project的部分latex部分都是直接要求AI模仿生成。例如下面的Reference部分，我直接把新链接和之前的某个例子丢给AI帮我快速生成latex源码，就不用麻烦照着之前的引用逐行修改了。
+\section{实验总结}
+本实验通过向量点乘为手段，详细分析了Java与C语言在不同数据类型和数据规模下的运行速度。我们发现，GCC确实可以在编译层面极大地加速C语言运行的速度，我们通过解读机器码和分析运行瓶颈验证了这个事实。以及JVM现在的优化机制已经非常强大了，强大到在数据规模大的情况下已经可以超越O3优化后的C程序。但是，Java的instructions per second数确实较C慢上不少。\textbf{因此，我们不能一概而论的说哪个编程语言更快}。在不同的场景和优化级别下，Java可能会比C快上几倍，或是慢上几倍。
+
+
+在实验的过程中，的确出现了很多冲击我之前认知的东西，也被现代编译器的优化能力和JVM其貌不扬的实力所震撼。总的来说，学到的东西还算不少，如果时间能够给的再宽裕一点，我应该还会再深入研究一下JVM更加内部的一些优化实现原理，\sout{两周的时间确实有点短（逃）}。同时建议对这方面有兴趣的去看看赖海斌同学的report（见Reference），他在这个基础之上还增加了跨平台的测试，也比较有意思。
+
+
+\textbf{感谢各位能读到这里。}
+\newpage % 强制换页
+\section*{References}
+\begin{thebibliography}{9}
+
+\bibitem{experimentData} Brighton 
+\textit{All the original experiment data including in this report}. 
+Southern University of Science and Technology, 2025. 
+[Source code]. Available: 
+\href{https://github.com/BrightonXX/SUSTech-CPP-Project}{github.com/BrightonXX/SUSTech-CPP-Project} 
+
+
+\bibitem{IEEE 754} 
+\textit{IEEE Standard for Floating-Point Arithmetic (IEEE 754)}. 
+the Institute of Electrical and Electronics Engineers, 1985. 
+[Source code]. Available: 
+\href{https://en.wikipedia.org/wiki/IEEE_754}{wikipedia.org/IEEE\_754} 
+
+\bibitem{HaibinLai} 
+Lai H.B.\textit{CS205 Project2: Simple Matrix Multiplication}. 
+Southern University of Science and Technology, 2024. 
+[Source code]. Available: 
+\href{https://github.com/HaibinLai/CS205-CPP-Programing-Project}{github.com/HaibinLai/CS205\_Project2} 
+
+\bibitem{copilot2025} 
+GitHub. \textit{Copilot Chat Cookbook}. 
+Documentation, 2025. 
+Available: 
+\href{https://docs.github.com/en/copilot/copilot-chat-cookbook}{docs.github.com/copilot-cookbook} 
+
+\bibitem{evans2014}  
+Ben Evans. \textit{Understanding Java JIT Compilation with JITWatch, Part 1}.  
+Technical Article, Oracle, July 2014.  
+Available: 
+\href{https://www.oracle.com/technical-resources/articles/java/architect-evans-pt1.html}{oracle.com/technical-resources/articles/java/architect-evans-pt1.html}
+
+\bibitem{javabetter} Javabetter.cn. \textit{JVM JIT 编译器解析}. Technical Article, Javabetter.cn, n.d. Available: \href{https://javabetter.cn/jvm/jit.html#jvm-%E7%9A%84%E7%BC%96%E8%AF%91%E5%99%A8}{javabetter.cn/jvm/jit.html#jvm-的编译器}
+
+\end{thebibliography}
+\end{document}
