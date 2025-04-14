@@ -1,0 +1,654 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{setspace}
+\usepackage[hidelinks]{hyperref}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[most]{tcolorbox} % 加载 tcolorbox 及其 listings 库
+\definecolor{bgcolor}{RGB}{230,230,230}
+\definecolor{bgcolor2}{RGB}{240,230,240}
+\definecolor{licolor}{RGB}{100,100,100}
+\linespread{1.2} 
+\usepackage{algorithmic}
+\usepackage[a4paper, left=2.5cm, right=2.5cm, top=3cm, bottom=2.5cm]{geometry}
+\usepackage{ctex} 
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\lhead{\textbf{Brighton}}
+\chead{BMP Image Processing}
+\rhead{CS219 Project3}
+
+\newtcblisting{commandline}{
+  breakable,                     % 允许代码块跨页
+  colback=bgcolor,               % 背景色为灰色
+  colframe=licolor,              % 边框色同背景色（若想显示
+  listing only,
+  arc=5mm,                       % 设置圆角半径
+  boxrule=1pt,                   % 不显示边框线，如需要可调大此数值
+  left=6pt, right=6pt, top=6pt, bottom=6pt, % 设置内边距
+}
+\newtcblisting{codeline}{
+  breakable,                     
+  colback=bgcolor2,               
+  colframe=licolor,              
+  listing only,                  
+  arc=5mm,                       
+  boxrule=1pt,                   
+  left=5pt, right=5pt, top=5pt, bottom=5pt, 
+  listing options={
+    basicstyle=\ttfamily\fontsize{10pt}{11pt}\selectfont,         % 代码字体
+    language=bash,                
+    showstringspaces=false,       
+    aboveskip=3mm, belowskip=3mm, % 上下间距
+    columns=flexible,             % 让字体对齐
+    keepspaces=true,
+    escapeinside={(*@}{@*)},      % 允许使用 LaTeX 命令
+    numbers=none,
+    frame=none,
+  },
+  before=\setstretch{0.8},        % 设置行间距 1.5 倍
+}
+
+\title{\textbf{A BMP Image Processor}}
+\author{} % 清空默认作者区
+\date{}   % 清空默认日期区
+
+% 自定义标题布局
+\makeatletter
+\renewcommand{\maketitle}{
+  \begin{center}
+    {\LARGE \@title \par} % 标题
+    \vspace{1em}
+    \textbf{\@author}     % 原作者区（可保留）
+    \vspace{1em}
+    \begin{tabular}{ll}
+      Student ID: & 12312710 \\
+      Name:       & 胥熠/Brighton \\
+      Course:     & CS219: Advanced Programming \\
+      Date:       & \today
+    \end{tabular}
+    \vspace{0.5em}
+    \hrule height 0.8pt % 分隔线
+  \end{center}
+}
+\makeatother
+
+\begin{document}
+\thispagestyle{empty}
+\maketitle
+
+{
+\setstretch{1.2}
+\tableofcontents
+}
+\vspace{3em}
+\section{前言}
+你说的对，但是「BMP」是由微软自主研发的一种全新无压缩位图存储标准。图像被存储在一个被称作「DIB设备无关位图」的二进制体系中...看到这个Project的第一眼——唉，今年Project好像更新换代了，和往年不太一样了。再仔细看一眼，其实还是换汤不换药——\textbf{\textit{矩阵！}}最后定睛一看，今年的其实要更加友善，毕竟不涉及矩阵的乘法，但是我们依旧可以逐步发掘「优化」的真相。同时在图像处理方面，我还引入了经典Sobel算子（一种简单的卷积操作）来检测图像的边缘。
+
+
+\section{功能展示}
+\subsection{运行环境}
+本程序是由C语言编写。运行设备为Lenovo Legion Y9000P运行x86下的Windows 11, 使用Intel i9-13900HX(8 P-cores + 16 E-cores)，24GB DDR5运存。使用Powershell通过GCC编译器运行下列命令编译和运行（bmpedit.c放置在path文件夹内）：
+\begin{commandline}
+PS *path*> gcc -o bmpedit bmpedit.c -O3 -march=native -fopenmp -lm
+PS *path*> ./bmpedit *Tokens*
+\end{commandline}
+其中,“-O3”和“-march=native”是可选项，是为了在编译层面加快程序运行速度。“-fopenmp”选项是必要的，因为这个程序中使用了OpenMP并行处理指令。“-lm”是链接的数学库，在绝大多数情况不需要但是也可以加上。
+
+\subsection{程序使用教程}
+直接输入./bmpedit或者错误使用指令时，程序会展示使用方法，内容如下：
+\begin{commandline}
+Usage: ./bmpedit -i input.bmp [-i input2.bmp] -o output.bmp -op operation [args]
+
+Operations:
+  add VALUE        - Adjust brightness by adding VALUE to all pixels
+  average          - Blend two images by averaging their pixel values
+  grayscale        - Convert image to grayscale
+  flip h|v         - Flip image horizontally (h) or vertically (v)
+  blur [RADIUS]    - Apply blur effect with optional radius (default: 1)
+  sobel [THRESHOLD] - Apply Sobel edge detection (default threshold: 100)
+  
+Examples:
+  ./bmpedit -i input.bmp -o output.bmp -op add 50       
+  ./bmpedit -i input1.bmp -i input2.bmp -o output.bmp -op average
+  ./bmpedit -i input.bmp -o output.bmp -op grayscale    
+  ./bmpedit -i input.bmp -o output.bmp -op flip h       
+  ./bmpedit -i input.bmp -o output.bmp -op blur 3 
+  ./bmpedit -i input.bmp -o output.bmp -op sobel 120
+\end{commandline}
+\subsection{为图片增添亮度}
+在命令行中调用：
+\begin{commandline}
+./bmpedit -i input.bmp -o output.bmp -op add 200
+\end{commandline}
+其中文件都在当前目录，input.bmp为输入文件名，output.bmp为输出文件名，add后面数字范围为[1,255]。
+
+
+输入案例（input.bmp）
+\begin{figure}[H]
+  \centering
+  % 第一个图片所在的区域，宽度设置为文本宽度的45%
+  \begin{minipage}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=0.9\textwidth]{demo2.bmp}
+   \caption{处理前}
+    \label{fig:image1}
+  \end{minipage}
+  \hfill % 用于在两图片之间插入间距
+  % 第二个图片所在的区域，宽度同样为45%
+  \begin{minipage}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=0.9\textwidth]{outputdemo1.bmp}
+  \caption{处理后}
+    \label{fig:image2}
+  \end{minipage}
+\end{figure}
+可以看到在全局加了200点亮度后，一张很黑的图片被处理成了比较亮的图片，同时注意到图片中间发光区域的细节消失了。
+
+
+
+\subsection{平均两张图片}
+在命令行中调用：
+\begin{commandline}
+./bmpedit -i input.bmp -i input2.bmp -o output.bmp -op average
+\end{commandline}
+对两张相同长宽的照片进行像素级别的平均，其对应像素RGB是两个图片对应像素RGB值的算数平均数。
+
+
+输入案例（input.bmp，input2.bmp）
+\begin{figure}[H]
+  \centering
+  % 第一个图片所在的区域，宽度设置为文本宽度的45%
+  \begin{minipage}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=0.6\textwidth]{demoqq.bmp}
+   \caption{一只可爱的企鹅}
+    \label{fig:image1}
+  \end{minipage}
+  \hfill % 用于在两图片之间插入间距
+  % 第二个图片所在的区域，宽度同样为45%
+  \begin{minipage}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=0.6\textwidth]{demo1.bmp}
+  \caption{一条可爱的鲨鱼}
+    \label{fig:image2}
+  \end{minipage}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.4\textwidth]{outputav.bmp}
+  \caption{平均结果}
+  \label{fig:example}
+\end{figure}
+可以看到两张图片平均后原本的颜色都变淡了，且重合部分可以同时看到两个图片的细节，产生了半透明叠加的效果。
+
+
+\subsection{让图片变成灰色调}
+在命令行中调用：
+\begin{commandline}
+./bmpedit -i input.bmp -o output.bmp -op grayscale 
+\end{commandline}
+将彩色图像转换为灰度图像，模拟黑白照片效果。本程序采用常用的加权平均法（Luminance method: $Gray = 0.299 \times R + 0.587 \times G + 0.114 \times B$）。
+
+
+输入案例（input.bmp）
+\begin{figure}[H]
+  \centering
+  % 第一个图片所在的区域，宽度设置为文本宽度的45%
+  \begin{minipage}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=0.8\textwidth]{demo6.bmp}
+   \caption{一张五彩斑斓的图像}
+    \label{fig:image1}
+  \end{minipage}
+  \hfill % 用于在两图片之间插入间距
+  % 第二个图片所在的区域，宽度同样为45%
+  \begin{minipage}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=0.8\textwidth]{outputgr.bmp}
+  \caption{转换后的灰度图像}
+    \label{fig:image2}
+  \end{minipage}
+\end{figure}
+
+
+\subsection{水平竖直翻转}
+在命令行中调用：
+\begin{commandline}
+./bmpedit -i input.bmp -o output1.bmp -op flip h
+./bmpedit -i input.bmp -o output2.bmp -op flip v
+\end{commandline}
+将图像左右镜像翻转，或者上下镜像翻转。
+
+
+输入案例（input.bmp）
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.5\textwidth]{demo7.bmp}
+  \caption{原始图像}
+  \label{fig:example}
+\end{figure}
+
+输出案例（output1.bmp、output2.bmp）
+\begin{figure}[H]
+  \centering
+  % 第一个图片所在的区域，宽度设置为文本宽度的45%
+  \begin{minipage}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=0.9\textwidth]{demo8.bmp}
+   \caption{左右翻转后的图像}
+    \label{fig:image1}
+  \end{minipage}
+  \hfill % 用于在两图片之间插入间距
+  % 第二个图片所在的区域，宽度同样为45%
+  \begin{minipage}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=0.9\textwidth]{demo9.bmp}
+  \caption{上下翻转后的图像}
+    \label{fig:image2}
+  \end{minipage}
+\end{figure}
+
+
+\subsection{为图片添加模糊效果}
+在命令行中调用：
+\begin{commandline}
+./bmpedit -i input.bmp -o output.bmp -op blur 4
+\end{commandline}
+对图像应用简单的盒子模糊（Box Blur）效果，使图像看起来模糊或失焦。其中“4”代表模糊半径为4格像素（即处理 $(2*4+1) \times (2*4+1) = 9 \times 9$ 的邻域）。可以换成其他任意大小的正整数（程序内限制了上限为10）。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{demo10.bmp}
+  \caption{原始图像}
+  \label{fig:example}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{outputbl.bmp}
+  \caption{处理后图像}
+  \label{fig:example}
+\end{figure}
+
+\subsection{基于Soble算子的边缘检测}
+在命令行中调用：
+\begin{commandline}
+./bmpedit -i input.bmp -o output.bmp -op sobel 200
+\end{commandline}
+对图像应用简单的Soble算子，检测出图像中RGB信息变化剧烈的边缘部分。其中“200”是设定的阈值，高于阈值的部分会被认为是边缘并输出黑色，否则输出白色。
+
+\begin{figure}[H]
+  \centering
+  % 第一个图片所在的区域，宽度设置为文本宽度的45%
+  \begin{minipage}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=0.8\textwidth]{demo20.bmp}
+   \caption{原始图像}
+    \label{fig:image1}
+  \end{minipage}
+  \hfill % 用于在两图片之间插入间距
+  % 第二个图片所在的区域，宽度同样为45%
+  \begin{minipage}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=0.8\textwidth]{outputso.bmp}
+  \caption{处理后的图像}
+    \label{fig:image2}
+  \end{minipage}
+\end{figure}
+可以看到处理后的图像保留了原图像的主要轮廓和纹理边缘。
+
+\subsection{错误输入识别}
+程序能够识别一些常见的用户输入错误或文件问题，并给出相应的提示信息，避免程序异常退出或产生错误结果，具有良好的Robustness。
+\begin{commandline}
+# 缺少操作
+./bmpedit -i demo5.bmp -o out.bmp            
+Error: No operation specified
+*Display Usage*
+  
+# 缺少必要参数 (如输出文件)
+PS *path*> ./bmpedit -i input.bmp -op add 50
+Error: No output file specified
+Usage: ./bmpedit ...
+
+# 操作参数不足 (如 'add' 缺少数值)
+PS *path*> ./bmpedit -i input.bmp -o out.bmp -op add
+Error: 'add' operation requires a value
+
+# 无效操作名称
+PS *path*> ./bmpedit -i input.bmp -o out.bmp -op rotate 90
+Error: Unknown operation 'rotate'
+
+# 文件无法打开或不存在
+PS *path*> ./bmpedit -i non_existent.bmp -o out.bmp -op grayscale
+Error: Cannot open file non_existent.bmp
+Error: Could not load input file non_existent.bmp
+
+# 文件格式不支持 (非"BM"签名, 或非24位, 或压缩格式)
+PS *path*> ./bmpedit -i not_a_bmp.jpg -o out.bmp -op grayscale
+Error: Not a BMP file (invalid signature)
+PS *path*> ./bmpedit -i indexed_color.bmp -o out.bmp -op grayscale
+Error: Only 24-bit uncompressed BMP files are supported
+
+# 'average' 操作缺少第二个输入文件
+PS *path*> ./bmpedit -i input1.bmp -o out.bmp -op average
+Error: 'average' operation requires two input images
+
+# 'average' 操作两输入文件尺寸不匹配
+PS *path*> ./bmpedit -i input1.bmp -i different_size.bmp -o out.bmp -op average
+Error: Images must have the same dimensions for averaging
+Error: Operation failed
+
+# 程序成功运行时提示 （blur 和 sobel 操作还会返回运行时间供参考）
+PS *path*> ./bmpedit -i demo12.bmp -o outputtemp.bmp -op blur 5   
+Blur operation took 2.588488 seconds
+Operation 'blur' completed successfully. Output saved to outputtemp.bmp
+\end{commandline}
+这些检查能够保证程序能够被正确使用，并且给出对应错误提示方便用户纠正。
+
+\section{功能实现}
+\subsection{24位无压缩BMP文件的存储结构}
+BMP(Bitmap)是一种简单的图像格式，而其中24位无压缩BMP则是其中的相对好处理的一种格式。在这个Project中，我将只关注24位无压缩BMP文件。\textbf{因此在下述的报告中，所有BMP都指24位无压缩BMP文件。}
+
+
+一个标准的24位无压缩BMP文件主要由三部分构成：14字节的文件头、通常为40字节的信息头和像素数据。
+% BMP文件头表格
+\begin{table}[htbp]
+  \centering
+  \caption{BMP文件头 (BMP Header - 14字节)}
+  \begin{tabular}{|c|c|l|}
+    \hline
+    \textbf{偏移量} & \textbf{大小（字节）} & \textbf{描述} \\
+    \hline
+    0x00 & 2 & 文件类型标识符（必须为"BM"，0x42 0x4D） \\
+    \hline
+    0x02 & 4 & 文件大小（以字节为单位） \\
+    \hline
+    0x06 & 2 & 保留，通常设为0 \\
+    \hline
+    0x08 & 2 & 保留，通常设为0 \\
+    \hline
+    0x0A & 4 & 从文件头到像素数据的偏移量 \\
+    \hline
+  \end{tabular}
+  \label{tab:bmp_header}
+\end{table}
+这部分位于文件的开头，提供了文件的基本标识和信息。
+% 信息头表格
+\begin{table}[htbp]
+  \centering
+  \caption{信息头 (DIB Header - 40字节)}
+  \begin{tabular}{|c|c|l|}
+    \hline
+    \textbf{偏移量} & \textbf{大小（字节）} & \textbf{描述} \\
+    \hline
+    0x0E & 4 & 信息头大小（对于BITMAPINFOHEADER为40） \\
+    \hline
+    0x12 & 4 & 图像宽度（像素） \\
+    \hline
+    0x16 & 4 & 图像高度（像素，可为负值） \\
+    \hline
+    0x1A & 2 & 色彩平面数（必须为1） \\
+    \hline
+    0x1C & 2 & 每像素位数（对于24位BMP为24） \\
+    \hline
+    0x1E & 4 & 压缩方式（0表示无压缩） \\
+    \hline
+    0x22 & 4 & 图像大小（可设为0表示使用默认值） \\
+    \hline
+    0x26 & 4 & 水平分辨率（像素/米） \\
+    \hline
+    0x2A & 4 & 垂直分辨率（像素/米） \\
+    \hline
+    0x2E & 4 & 调色板颜色数（0表示使用最大值） \\
+    \hline
+    0x32 & 4 & 重要颜色数（通常为0） \\
+    \hline
+  \end{tabular}
+  \label{tab:dib_header}
+\end{table}
+紧随文件头之后，描述了图像的具体属性，如尺寸、颜色深度等。
+
+
+对于像素部分，24位无压缩BMP就是指图片中一个像素占24位，也就是3字节。其中三个字节分别存储蓝色、绿色、红色，也就是经典的RGB存储\sout{（额，不应该叫BGR吗）}。一个unsigned字节能够表示的数字范围为0-255，数字越小代表这个颜色越暗。所以RGB(0,0,0)代表的是黑色，而RGB(255,0,0)代表的是纯红色。
+
+
+像素按行存储，而且是\textbf{从下到上}存储。每行像素数据按4字节对齐。例如一行中有五个像素，则一行的数据会有$5\times 3=15$个字节，为了字节对齐4的倍数，BMP文件在这一行后会填充一byte的对齐数据，因此在读取的时候要计算好Padding量，在一行结束时谨慎确定下一行开始位置。
+\subsection{数据存储方式}
+在这里，我们为了方便使用fread读取，我们定义了四个结构体，分别为： BMPFileHeader（14字节文件头）、BMPInfoHeader（40字节信息头）、Pixel（24位像素）和BMPImage（图片总封装）。
+
+
+其中，BMPFileHeader和BMPInfoHeader的封装如下，其顺序符合上述表格：
+\begin{codeline}
+ typedef struct {
+     unsigned short bfType;       // Magic identifier "BM" (0x4D42)
+     unsigned int   bfSize;       // File size in bytes
+     unsigned short bfReserved1;  // Reserved
+     unsigned short bfReserved2;  // Reserved
+     unsigned int   bfOffBits;    // Offset to image data
+ } BMPFileHeader;
+ 
+ typedef struct {
+     unsigned int   biSize;          // Header size
+     int            biWidth;         // Width of the image
+     int            biHeight;        // Height of the image
+     unsigned short biPlanes;        // Color planes
+     unsigned short biBitCount;      // Bits per pixel
+     unsigned int   biCompression;   // Compression type
+     unsigned int   biSizeImage;     // Image size in bytes
+     int            biXPelsPerMeter; // X resolution
+     int            biYPelsPerMeter; // Y resolution
+     unsigned int   biClrUsed;       // Colors used
+     unsigned int   biClrImportant;  // Important colors
+ } BMPInfoHeader;
+\end{codeline}
+
+对于一个像素，包含红绿蓝三种颜色，因此也只需要封装三个unsigned char。
+\begin{codeline}
+typedef struct {
+     unsigned char blue;
+     unsigned char green;
+     unsigned char red;
+ } Pixel;
+\end{codeline}
+
+而对于整体BMPImage封装，则需要稍微小心。这里不采用二维数组（双指针）存储像素，而是采用线性存储，即数组的第[0, width-1]个元素代表第一行，[width, 2*width-1]代表第二行...访问 (x, y) 处的像素通过计算索引 $y \times width + x$ 实现。也可以定义一个宏#define PIXEL\_AT(image, x, y) ((image)->pixels + (y) * (image)->width + (x)) 来方便计算索引。
+
+
+其实对于矩阵，采用线性存储是普遍的常识，也是后续SIMD实现的必要数据结构。如果使用双重指针，不仅多很多次不必要的解指针操作，内存不连续还会导致CPU根本没有办法进行并行操作。同时显而易见的，线性存储只用一次malloc，这为内存管理提供了很大的方便。
+
+
+以及，存储矩阵的长宽属性，我们应该使用$size\_t$，在比int范围大一倍的同时免去了检查参数负数的必要。集齐以上要素，我的BMP封装的设计为：
+\begin{codeline}
+typedef struct {
+     BMPFileHeader fileHeader;
+     BMPInfoHeader infoHeader;
+     Pixel* pixels; 
+     size_t width;
+     size_t height;
+} BMPImage;
+\end{codeline}
+符合直觉且合理高效的存储了一个BMP图像。
+
+\subsection{内存对齐}
+在读取文件的时候，我们必须要保证文件的每一个字节都被映射到适当的位置。但是C/C++的结构体成员内存对齐是一个相对混沌邪恶的东西，它可能会在某些2字节的变量后面插入两个填充字节以保证4字节对齐（例如在 $BMPFileHeader$ 的 $bfType$ 和 $bfSize$ 之间）。这样会导致 $sizeof(BMPFileHeader)$ 不等于14字节，$fread$ 读取的数据就会错位。
+
+
+因此对于两种文件头封装结构，我们必须使用禁用自动对齐，保证结构体成员紧密排列，与文件格式完全一致。
+\begin{codeline}
+#pragma pack(push, 1) // 禁用自动对齐
+ typedef struct { /* Header members */ } BMPFileHeader;
+ typedef struct { /* Info header members */ } BMPInfoHeader;
+#pragma pack(pop)   // 恢复自动对齐
+\end{codeline}
+保证了正确对齐后，我们就可以直接使用 fread 和 fwrite 直接读写结构体。
+
+\subsection{图片处理}
+现在，我们成功的将一张图片的数据导入到了结构体中，终于到了这个程序最核心，但也是相对简单的一部分，处理图片。
+
+\paragraph{亮度调整 (addBrightness):}
+为了调整亮度，我们只需要for循环，将每一个Pixel元素的红绿蓝三个值加上某一个数值，大于255的数字设置成255就可以了。上面事例图的高光部分消失就是因为加上一个数字时候，那一片区域的RGB都超出阈值都被设置成上限255，所以细节丢失了。
+
+\paragraph{图像平均 (averageImages):}
+首先检查两张输入图像的尺寸（宽度和高度）是否完全一致，如果不一致则报错退出。如果尺寸相同，就创建一个新的空白图像作为结果。然后遍历所有像素位置计算RGB算数平均值即可。
+
+
+\paragraph{灰度化 (convertToGrayscale):}
+利用加权平均数 0.299R + 0.587G + 0.114B 计算亮度（Luminance Preserving，原理基于人眼对光的敏感度），然后将这个数值在同时赋给RGB三色，呈现出来的就是对应亮度的灰色调。
+
+
+\paragraph{图像翻转 (flipImage):}
+原理非常简单，根据是H还是V进行行或列内的数列翻转操作。
+
+
+\paragraph{盒子模糊 (blurImage):}
+$blur$操作的原理是对一个像素而言，后模糊信息来自于距离为半径窗口范围内的像素的平均值。也就是说假如说假如说我们的模糊半径为2，则我们计算以此像素为中心，边长为5的正方形像素的RGB平均值。这么看我们的算法时间复杂度为$O(r^2*pixels)$，我们可以通过滑动窗口算法来优化。即计算完第一个像素后，右侧的像素只需要在左侧计算结果的基础上，减去最左侧一边，加上最右边的数据即可，优化后，算法的时间复杂度为$O(r*pixels)$。还可以进一步优化吗，可以的！
+
+\paragraph{Sobel 边缘检测 (detectEdges):}
+Sobel 算子是一种经典的基于一阶导数的边缘检测方法。原理是通过卷积核（Sobel算子）计算水平和竖直方向上的梯度，再通过几何平均值（在这里为了计算效率我使用了绝对值的算数平均）确定是否大于某个阈值，如果大于则赋为黑色RGB(0,0,0)，如果小于则赋为白色RGB(255,255,255)，于是我们就可以获得白底黑边的边缘图。下面是Sobel算子的矩阵表示：
+
+ $$ G_x = \begin{bmatrix} -1 & 0 & +1 \\ -2 & 0 & +2 \\ -1 & 0 & +1 \end{bmatrix} \quad G_y = \begin{bmatrix} -1 & -2 & -1 \\ 0 & 0 & 0 \\ +1 & +2 & +1 \end{bmatrix} $$
+
+\section{如何科学优化}
+
+\subsection{线性存储像素}
+线性存储像素的优势已经在上面提及了，它不仅避免了多次malloc和解指针，还是后续并行操作的基石，还可以改善Cache命中率，因此再次强调一下。
+\subsection{编译器优化}
+首先，所有不开O3优化的性能分析都没有任何意义。其次，C语言基础语法性能不够，打算手写SIMD？我们在这个Project中涉及的算法都是矩阵加法，由于我们线性存储像素，所以一切操作在编译器面前都是$Vector_A = Vector_B + Vector_C$的形式，和向量点乘一样属于编译器看得懂，能做优化的类型。因此在gcc的-march=native的优化下，能够生成SIMD技术加持的机器码，因此也没必要手写了。这是addBrightness方法中的部分逆向机器码：
+
+\begin{commandline}
+    addBrightness:这是外部调用的主函数接口。任务是设置环境、检查参数，并启动OpenMP。
+    4035e0:	callq  4039c0 <GOMP_parallel>  ; 调用OpenMP并行区域
+    addBrightness._omp_fn.0: 这是由编译器为 OpenMP 并行区域生成的工作函数。
+    4015f5:	vpmovzxbw %xmm7,%ymm10       ; 零扩展8位到16位
+    401635:	vpaddd %ymm14,%ymm2,%ymm2    ; 向量加法
+    40163a: vinserti128...               ; 合并成32字节YMM5
+    40164f: vmovdqu -0x40(%r8),%xmm6     ; 预取下一块数据
+    40165b: vpmovzxbw %xmm7,%ymm10       ; 8位→16位无符号扩展
+    40166e: vpaddd %ymm14,%ymm2,%ymm2    ; 32位加法
+    4016a0:	vpminsd %ymm13,%ymm9,%ymm9   ; 向量最小值饱和
+    4017ac:	vpackuswb %ymm5,%ymm2,%ymm5  ; 打包32位到8位
+    ...
+\end{commandline}
+在gcc生成的SIMD中，一如既往的将标量计算转换成向量计算，一次迭代处理32字节。可以看到在这种相对简单直白的任务中，gcc能够应付过来。
+
+
+但是需要注意的是当任务变得复杂，比如很多分支或者内存不规则的情况，gcc很可能就不能理解你在干什么进而无法生成对应SIMD了，因此优化也不能全部指望编译器，\sout{或者说要写编译器能看懂的代码}。
+\subsection{并行化操作}
+OpenMP伟大，我们只需要在需要并行化的循环前加上一行 \#pragma omp parallel for (args)，然后在编译的时候加上 -fopenmp 连接上OpenMP的库就可以享受并行给程序带来的速度。使用OpenMP需要注意的点就是尽量减少数据竞争，就比如说单提向量点乘加到一个变量的操作，可以优化成点乘分散加到一个向量上最后相加。多个线程竞争着写入一个变量会导致一定的性能削减。在我们的图像处理中，每个像素都是相对独立的，因此这种顾虑比较小。
+\subsection{避免重复索引计算}
+在blurImage的滑动窗口计算中有两个双重循环，大概长这样：
+\begin{codeline}
+    // 水平方向模糊 
+     for (int i = 0; i < height; i++) {
+        for (int j = 0; j < width; j++) {
+            * 计算水平窗口的像素和 *
+            long long sumRed = 0, sumGreen = 0, sumBlue = 0, int count = 0; ...（省略中间计算代码）
+            * 存储结果到临时缓冲区 *
+            temp[i * width + j].red = (unsigned char)(sumRed / count);
+            temp[i * width + j].green = (unsigned char)(sumGreen / count);
+            temp[i * width + j].blue = (unsigned char)(sumBlue / count);
+                 注意这里的计算冗余
+        }
+    }
+\end{codeline}
+我们发现，在存储结果到临时缓冲区的时候，一个forJ循环要计算3*width次$i\times width$，这个计算显然是冗余的，我们可以这样优化：
+\begin{codeline}
+     for (int i = 0; i < height; i++) {
+        int index_temp = i * width;
+        for (int j = 0; j < width; j++) {
+            * 存储结果到临时缓冲区 *
+            temp[index_temp + j].{red,green,blue} = (unsigned char)(sum{Color} / count);
+        }
+    }
+\end{codeline}
+这样提前计算好索引开始的位置，我们一次forJ循环就只用计算一次$i\times width$，这个双重循环总共节省了大约3*pixels次乘法计算。
+
+
+测试性能，发现这种操作好像没有带来时间上的优化，似乎是O3优化帮我们做了，但这种思想还是值得一提。
+\subsection{多种封装方式}
+我们注意到，其实Pixel封装像素数据对于某些并行操作而言，是一种相对不利的数据结构。比如说，我们想要让某张图像的颜色变得更绿，假如说我们用三条数组分别存储RGB颜色数据。这样的话，对于每一种颜色的内存空间都是连续的了，变绿也就变成真正的向量加法操作了，效率肯定会有提升。
+
+
+但这也不一定对所有并行操作有利，例如Sobel算子，RGB单独存储反而吃了不连续和多次读写的亏。因此我这里只是抛砖引玉一下，在实际应用中需要按照需求和实际性能表现选择不同的封装方式，\sout{才不是因为没时间了。}具体可以搜索关键词：AoS: Array of Structures vs SoA: Structure of Arrays。
+
+
+\subsection{性能对比}
+为了量化各个不同优化手段的加速效果，我们以计算量最大的 blur (Radius = 5)为例进行计时比较。测试环境同上（i9-13900HX），计时方法采用Project 2中实现的跨平台高精度计时器，仅计算核心计算时间不计入文件IO时间。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.6\textwidth]{demo12.bmp}
+  \caption{实验使用的图像，为展示已压缩处理}
+  \label{fig:example}
+\end{figure}
+
+
+这里我们设计了四种情况，分别是不使用编译器优化，单采用-O3 -march=native优化（SIMD指令），单使用OpenMP，SIMD+OpenMP四种不同优化类型组合。处理一张大小为$9725\times 4862 \approx 47M$像素的图片（上图），只记录实际处理时间，不记录文件IO时间，重复五次记录平均值。这是实验结果：
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{sta2.png}
+  \caption{47M}
+  \label{fig:example}
+\end{figure}
+
+感觉加了OpenMP后，SIMD好像没有起到什么优化效果。我们再将原图长宽放大三倍（数据量翻九倍）看看，现在图片大小为$29175\times 14586 \approx 426M$，占用硬盘空间已经达到了1.16G，可以说是一个巨量的数据了：
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{sta1.png}
+  \caption{426M}
+  \label{fig:example}
+\end{figure}
+
+可以看到，OpenMP + SIMD的组合在计算密集型任务中确实是表现最佳的。而且数据量非常大的时候也能够和单OpenMP拉开一些差距，这可能是因为SIMD的优化效果常数比较大。在426M的数据量下，OpenMP + SIMD比无优化的速度快了11倍左右，还是相当可观的。
+
+
+我们再用Intel VTune Profiler 观察一下运行瓶颈：
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{ana.png}
+  \caption{分析结果}
+  \label{fig:example}
+\end{figure}
+
+首先最大的变化，我们发现Total Thread Count变成了35个，可以看到运行中段处理照片的时候，OpenMP帮助我们开了很多线程并行处理图片。我们也发现Memory Bound很小，主要程序慢在Divider（取平均值那一步）和Port Utilization（很多线程同时向Sum写入数据，需要等待）。总的来看优化做的还算合理。
+\section{AI辅助了哪些工作}
+
+\subsection{程序主体逻辑}
+这个Project比较LLM友好，我的程序主体架构是由Claude 3.7 Sonnet提供的，它主要帮我完成了程序的IO和Tokenize部分。它也帮我写了一些方法和结构体，但写的不好。首先它用的是二维数组存储，再其次它用的是int存储长宽。我在他的基础上进行了封装体的改进，一些新方法的移植，以及OpenMP等进一步的优化。
+\subsection{加速撰写报告}
+我有一个神奇的观点——在LLM逐渐变强的时代下，我们必须要建立一个自己的语料库。
+
+
+谷歌最新的Gemini 2.5 Pro已经支持了100M Token的上下文，最长至65536Token的输出。这种量变会造成质变，我可以把前两个Project的latex丢进去，把我的程序源码丢进去，甚至把我写的一些文章丢进去（模仿语言风格）让他来写Project3报告。事实上我虽然没有直接粘贴他的报告，但也边看着AI的输出边自己写，起到了一个参考的作用，而且它还自动帮我补全了部分latex，的确能够加速报告的完成。
+\section{结语}
+本Project实现了一个命令行24位无压缩BMP图像处理器，可以支持很多功能例如灰色调和边缘处理，同时也探索了如何加速图片处理的过程。
+
+本Project还有很多可以改进的地方，例如在优化领域做的工作还是太浅了，为了效率肯定还是要手写原生的SIMD的。但是由于本Project时间被期中周覆盖，工作量太大了实在是无法完成。但作为一次学习来说还是相对成功的，我探索了数据结构、优化方法和SIMD并行计算等知识，从不同角度思考了如何加速图片处理。
+
+
+同时，与Project 1和Project 2一样，在DDL结束后我也会将本次Project中涉及到的所有源码开源，放在 https://github.com/BrightonXX/SUSTech-CPP-Project 下。
+
+
+\textbf{感谢各位能读到这里。}
+\newpage % 强制换页
+\section*{References}
+\begin{thebibliography}{9}
+
+\bibitem{Monad2022} 
+Yan W.Q. \textit{CS205 Project4: Matrix Multiplication}. 
+Southern University of Science and Technology, 2022. 
+[Source code]. Available: 
+\href{https://github.com/YanWQ-monad/SUSTech_CS205_Projects}{github.com/YanWQ-monad/CS205\_Project4} 
+
+
+
+\end{thebibliography}
+\end{document}
