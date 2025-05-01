@@ -13,6 +13,7 @@ Lecturer: Prof. Shiqi Yu
 |:---:|-------------------------------------|--------------|:---:|---------:|
 |  1  | A Simple Calculator                 | 高精度计算器     | 97 | 50+ hrs   |
 |  2  | Dot Product of Two Vectors          | 使用C和Java计算点积   | 99 | 20+ hrs   |
-|  3  | BMP Image Processing          | 处理BMP图像   | ? | 20+ hrs   |
+|  3  | BMP Image Processing          | 处理BMP图像   | 98 | 20+ hrs   |
+|  4  | A Simple Image Library          | 图像库   | ? | ? hrs   |
 
 本GitHub Repositories会在这个学期结束后，我有空闲时间的时候再次修缮。
