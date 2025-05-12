@@ -1,0 +1,639 @@
+\documentclass[11pt]{article}
+
+% 必备宏包
+\usepackage{amsmath}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{setspace}
+\usepackage[hidelinks]{hyperref}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[most]{tcolorbox}
+\usepackage{ulem} % For strikethrough text (\sout)
+
+% 设置图片路径（当前目录）
+\graphicspath{{./}}
+
+% 中文支持
+\usepackage{ctex} % 确保系统安装了中文字体
+\setCJKmainfont[BoldFont={SimHei}]{SimSun} % 设置中文主字体（宋体），使用黑体作为粗体
+\setCJKsansfont{SimHei} % 设置中文无衬线字体（黑体）
+\setCJKmonofont{FangSong} % 设置中文等宽字体（仿宋）
+\XeTeXinputencoding "utf8" % UTF-8 编码
+
+% 页面布局
+\usepackage[a4paper, left=2.5cm, right=2.5cm, top=3cm, bottom=2.5cm]{geometry}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\lhead{\textbf{Brighton}}
+\chead{Image Library}
+\rhead{CS219 Project4}
+
+% 代码块样式
+\definecolor{bgcolor}{RGB}{230,230,230}
+\definecolor{bgcolor2}{RGB}{244,230,244}
+\definecolor{licolor}{RGB}{100,100,100}
+\newtcblisting{commandline}{
+  breakable,
+  colback=bgcolor,
+  colframe=licolor,
+  listing only,
+  arc=5mm,
+  boxrule=1pt,
+  left=6pt, right=6pt, top=6pt, bottom=6pt,
+}
+\newtcblisting{codeline}{
+  breakable,
+  colback=bgcolor2,
+  colframe=licolor,
+  listing only,
+  arc=7mm,
+  boxrule=1pt,
+  left=5pt, right=5pt, top=5pt, bottom=5pt,
+  listing options={
+    basicstyle=\ttfamily\fontsize{10pt}{11pt}\selectfont,
+    language=bash,
+    showstringspaces=false,
+    aboveskip=1mm, belowskip=1mm,
+    columns=flexible,
+    keepspaces=true,
+    escapeinside={(*@}{@*)},
+    numbers=none,
+    frame=none,
+  },
+  before=\setstretch{1.1},
+}
+
+% 标题信息
+\title{\textbf{A Simple Image Library} }
+\author{}
+\date{}
+
+% 自定义标题布局
+\makeatletter
+\renewcommand{\maketitle}{
+  \begin{center}
+    {\LARGE \@title \par}
+    \vspace{1em}
+    \textbf{\@author}
+    \vspace{1em}
+    \begin{tabular}{ll}
+      Student ID: & 12312710 \\
+      Name:       & 胥熠/Brighton \\
+      Course:     & CS219: Advanced Programming \\
+      Date:       & \today
+    \end{tabular}
+    \vspace{0.5em}
+    \hrule height 0.8pt
+  \end{center}
+}
+\makeatother
+
+% 文档主体
+\begin{document}
+\thispagestyle{empty}
+\maketitle
+
+{
+\setstretch{1.2}
+\tableofcontents
+}
+\vspace{3em}
+
+
+
+\newpage % 强制换页
+\section{前言}
+Project4作为一个保留节目，延续了前几个学期实现一个C++矩阵类的传统要求，\\
+\sout{似乎是因为于老师似乎比较喜欢cv::Mat}。
+这个Project看似简单，实则暗藏玄机：内存是否安全申请和释放？类的设计是否高效优雅，还能满足鲁棒性，易用性？想要同时达成这些条件，其实相对来说是比较挑战的。
+以及如何在实现一个类的同时，引入一些有意思的东西呢？
+
+\section{功能展示}
+\subsection{文件结构}
+本图像库主要由以下核心文件构成：
+\begin{itemize}
+  \item \texttt{image.h}：图像类的头文件，包含了图像类的声明和相关函数的声明，模版类函数的实现。
+  \item \texttt{image\_proc.cpp}：图像处理函数的实现文件，包含了部分对图像进行处理的函数。
+  \item \texttt{image\_io.cpp}：图像输入输出函数的实现文件，包含了读取和保存图像的函数。
+\end{itemize}
+辅助文件包括：
+\begin{itemize}
+    \item \texttt{demo.cpp}：一个演示程序，展示了库的主要功能和用法。
+    \item \texttt{CMakeLists.txt}：用于构建库和演示程序的CMake配置文件。
+\end{itemize}
+
+\subsection{运行环境}
+本库使用C++17标准编写。运行设备为Lenovo Legion Y9000P运行x86下的Windows 11, 使用Intel i9-13900HX(8 P-cores + 16 E-cores)，24GB DDR5运存，支持OpenMP以及AVX2指令集。
+编译步骤为（上述文件均在path路径下，命令行为Ubuntu 20.04的wsl）：
+\begin{commandline}
+wsl *path*$ mkdir build
+wsl *path*$ cd build
+wsl *path*/build$ cmake .. -DCMAKE_BUILD_TYPE=Release
+wsl *path*/build$ cmake --build .
+wsl *path*/build$ ./demo 
+wsl *path*/build$ ./demo input.bmp input2.bmp 
+\end{commandline}
+如果运行设备不支持OpenMP和AVX2指令集，程序不会编译错误，而会在编译时候提供一个warning: \#warning "AVX2 not enabled" [-Wcpp]。同时在运行时不会运行相关代码。
+
+\subsection{库调用指南}
+首先，我们可以导入一张 24位无压缩BMP 图像，获取其基本属性，并在处理后保存。
+
+\subsubsection{核心对象解释： Pixel 与 Image}
+库的核心是两个模板类：
+\begin{itemize}
+  \item \texttt{ILib::Pixel<T, Channels>}：表示一个像素，其中 \texttt{T} 是每个通道的数据类型（如 \texttt{unsigned char}, \texttt{float}），\texttt{Channels} 是通道数。
+  \item \texttt{ILib::Image<PixelType>}：表示一个图像，其中 \texttt{PixelType} 是具体的像素类型（例如 \texttt{ILib::Pixel<unsigned char, 3>} ）。
+\end{itemize}
+同时，库的namespace为ILib。如果我们想要创造一个24位的RGB图像存储对象，我们可以使用ILib::Image<ILib::Pixel<unsigned char,3>>。
+也可以使用ILib::ImageU8C3（内置using定义）来表示。
+
+\subsubsection{图像加载查询与保存}
+首先，如需要使用图像库，我们需要包含库头文件：\#include "image.h"。
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.4\textwidth]{input.bmp}
+  \caption{input.bmp(后续处理使用的图像)}
+  \label{fig:input}
+\end{figure}
+
+\begin{commandline}
+    ILib::ImageU8C3 image = ILib::loadImageFromFile("input.bmp");
+    std::cout << "Image loaded: " << input_image.width() << "x" << input_image.height()
+    << " Channels: " << input_image.getPixelTypeChannels()
+    << " ColorSpace: " << static_cast<int>(input_image.getColorSpace()) << std::endl;
+    // 一些处理 
+    ILib::saveImageToFile(image, "output.bmp");
+    // 其实库不需要用户手动销毁对象，对象会在生命周期结束后自动调用release方法。
+    image.release();
+\end{commandline}
+
+
+\subsubsection{图像操作}
+
+\textbf{亮度调整}：支持通过adjustBrightness、adjustBrightness\_simd函数来实现，也可以通过更简单的 += 操作符来实现。
+
+\begin{commandline}
+    image += 50;
+(or)image.adjustBrightness(50); 
+(or)image.adjustBrightness_simd(50);
+\end{commandline}
+
+
+\begin{figure}[H]
+  \centering
+  % 第一个图片所在的区域，宽度设置为文本宽度的45%
+  \begin{minipage}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=0.4\textwidth]{bright.png}
+   \caption{亮度调整}
+    \label{fig:example}
+  \end{minipage}
+  \hfill % 用于在两图片之间插入间距
+  % 第二个图片所在的区域，宽度同样为45%
+  \begin{minipage}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=0.4\textwidth]{blend.png}
+  \caption{图像融合}
+    \label{fig:example}
+  \end{minipage}
+\end{figure}
+
+\textbf{图像融合}：支持对两张基本参数相同的图像进行混合，库提供的 \texttt{blend} 函数允许通过 alpha 权重控制两图的混合比例。操作符 \texttt{+} 也被重载用于两图的等权重混合。
+\begin{commandline}
+    ILib::ImageU8C3 image2 = ILib::loadImageFromFile("input2.bmp");
+    // 权重为：70% image + 30% image2
+    ILib::ImageU8C3 blended_image = ILib::blend(image, image2, 0.7f);
+    ILib::ImageU8C3 blended_image2 = image + image2; //权重各50%
+\end{commandline}
+
+
+
+\textbf{灰度转换}：支持对24位BMP图像进行灰度化处理，处理后的图像类型为8位灰度图像（通道数为1）。同时也支持保存为灰度图像。
+\begin{commandline}
+    ILib::ImageU8C1 image_gray = image.toGray(); // 转换为灰度图像
+    ILib::saveImageToFile(image_gray, "output_gray.bmp"); // 支持保存为灰度图像
+\end{commandline}
+
+\begin{figure}[H]
+  \centering
+  % 第一个图片所在的区域，宽度设置为文本宽度的45%
+  \begin{minipage}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=0.4\textwidth]{gray.png}
+   \caption{灰度图}
+    \label{fig:example}
+  \end{minipage}
+  \hfill % 用于在两图片之间插入间距
+  % 第二个图片所在的区域，宽度同样为45%
+  \begin{minipage}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=0.4\textwidth]{roi.png}
+  \caption{ROI操作}
+    \label{fig:example}
+  \end{minipage}
+\end{figure}
+
+\textbf{区域图像(Region of Interest)操作}：可以高效的选中图像的特点子区域，而无需复制像素数据。同时支持基于此区域对原图进行修改。
+\begin{commandline}
+    //定义一个ROI区域，这里是图像的中心四分之一部分。
+    Rect roi = {image.width()/4, image.height()/4, 
+                image.width()/2, image.height()/4};
+    // 获取ROI区域
+    ILib::ImageU8C3 roi_view = image_for_roi.roi(rect); 
+    roi_view += -50;
+    ILib::saveImageToFile(image, "output_roi.bmp"); 
+\end{commandline}
+
+
+\subsubsection{卷积与滤波}
+支持通用的2D卷积操作 (\texttt{filter2D})，并基于此提供了一系列预定义的图像滤波效果，
+如高斯模糊、锐化、Sobel边缘检测和浮雕效果，部分预定核的参数可修改。用户也可以自定义卷积核参与计算。
+\begin{commandline}
+  // 5x5 高斯核，标准差 1.5，其中5，1.5可修改
+  ILib::ImageU8C3 blurred_image = ILib::gaussianBlur(image, 5, 1.5);
+  // 3x3 Sobel核，阈值 120，true为采用曼哈顿距离，false为欧几里得距离
+  ILib::ImageU8C1 image_gray = ILib::convertToGrayscale(image);
+  ILib::ImageU8C1 image_sobel_edge;
+  ILib::sobelMagnitude(image_gray, image_sobel_edge, 3, 120.0, true);
+  // 锐化
+  ILib::ImageU8C3 sharpened_image = ILib::sharpen(image);
+  // 浮雕
+  ILib::ImageU8C3 embossed_image = ILib::emboss(image);
+  // 自定义卷积核示例
+  ILib::Image<ILib::Pixel<float, 1>> my_krnl(3, 3, ILib::ColorSpace::UNKNOWN);
+  my_krnl.at(0,0) = {1.1f}; my_krnl(0,1) = {4.5f}; my_krnl(0,2) = {1.4f};
+  my_krnl.at(1,0) = {1.0f}; my_krnl(1,1) = {-9.0f};my_krnl(1,2) = {1.0f}; 
+  my_krnl.at(2,0) = {0.9f}; my_krnl(2,1) = {0.8f}; my_krnl(2,2) = {1.0f};
+  ILib::ImageU8C3 custom_result;
+  ILib::filter2D(input_image, custom_result, custom_kernel);
+\end{commandline}
+
+\begin{figure}[H]
+  \centering
+  % 第一个图片所在的区域，宽度设置为文本宽度的45%
+  \begin{minipage}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=0.4\textwidth]{gaussian.png}
+   \caption{高斯模糊}
+    \label{fig:example}
+  \end{minipage}
+  \hfill % 用于在两图片之间插入间距
+  % 第二个图片所在的区域，宽度同样为45%
+  \begin{minipage}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=0.4\textwidth]{sobel.png}
+  \caption{Sobel边缘检测}
+    \label{fig:example}
+  \end{minipage}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  % 第一个图片所在的区域，宽度设置为文本宽度的45%
+  \begin{minipage}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=0.4\textwidth]{sharpen.png}
+   \caption{锐化}
+    \label{fig:example}
+  \end{minipage}
+  \hfill % 用于在两图片之间插入间距
+  % 第二个图片所在的区域，宽度同样为45%
+  \begin{minipage}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=0.4\textwidth]{emboss.png}
+  \caption{浮雕}
+    \label{fig:example}
+  \end{minipage}
+\end{figure}
+
+
+\begin{figure}[H]
+  \centering
+  % 第一个图片所在的区域，宽度设置为文本宽度的45%
+  \begin{minipage}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=0.4\textwidth]{custom1.png}
+   \caption{自定义卷积核（已黑化）}
+    \label{fig:example}
+  \end{minipage}
+  \hfill % 用于在两图片之间插入间距
+  % 第二个图片所在的区域，宽度同样为45%
+  \begin{minipage}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=0.4\textwidth]{custom2.png}
+  \caption{自定义卷积核（已飞升）}
+    \label{fig:example}
+  \end{minipage}
+\end{figure}
+
+\subsubsection{错误处理}
+库设计了很多编译阶段的检查，例如对于Pixel对象来说，会检查模板传入参数合理性：
+\begin{codeline}
+  static_assert(std::is_arithmetic_v<T> || std::is_enum_v<T>, 
+                "Pixel type must be arithmetic or enum");
+  static_assert(Channels > 0, "Pixel must have at least one channel");
+\end{codeline}
+如果传入的参数不合理，则会在编译阶段会报错。
+
+
+在include SIMD或者AVX2指令集函数的时候，会检查AVX2指令集是否可用:
+\begin{codeline}
+  #ifdef __AVX2__ // 仅在支持 AVX2 时编译此部分
+    #include <immintrin.h> 
+  #else
+    #warning "AVX2 not enabled"
+  #endif
+\end{codeline}
+在对应函数，会判断\_\_AVX2\_\_是否被定义，并选择性的运行代码：
+\begin{codeline}
+  #ifdef __AVX2__
+    // ... SIMD 处理代码 ...
+  #else
+    #warning "AVX2 not supported or enabled. Fail to run simd version"
+  #endif 
+\end{codeline}
+
+
+除此之外，基本的函数都提供了运行时异常处理机制，
+例如在读取图像文件时，如果文件不存在或格式不支持，函数传入对象不符合要求，则都会抛出异常。
+
+\section{需求和设计思路}
+与Project3有显著不同的是，Project3面向对象是纯粹的24位BMP图像，但这个Project的目标是构建一个更通用的图像库。
+图像可能有多种通道（Channel，我觉得这个词翻译的不好）：RGB三通道的图像是最经典的，而对于灰度图像来说只有一个通道，还有四通道带透明度信息的图像。
+
+
+图像还分不同的像素类型，RGB就是用三个unsigned char来表示构成一个像素的三种颜色分量。
+但除此之外，还有HSV、CMYK、YCbCr等不同的图像类型。以HSV为例，它的三个通道分别是色相、饱和度和明度。
+而色相的取值范围是0-360的整数（嗯..?），饱和度和明度的取值范围是0-1的小数，显然不能用char来表示。
+
+
+在设计核心图像类时，我们面临几个关键问题：如何表示不同类型的图像（灰度图、彩色图、不同颜色空间、不同数据深度）？如何高效且安全地管理像素数据内存？如何提供方便的像素访问和操作接口？
+在这个领域，C++的Template非常好用，可以只用写一次函数来支持不同的图像类型。
+
+
+但实现不同图像类IO是相对麻烦的，
+鉴于这次Project主要关注于类的应用，我会用模版类将不同图片形式描述出来，但是IO方法只移植24位的BMP图像。（以及8位灰度图像，我会把它按照24位的逻辑存储）
+
+\subsection{像素表示：Pixel 结构体模板}
+在上一个Project中，我们注意到我们可以有两种存储像素的方式。一种是一条线性像素，整齐的摆放着RGBRGBRG...（或者BGR）。
+另一种多条线性存储，比如说一条负责存储RRRRR，另外的负责存储其他颜色。乍一看两个存储方式都有优缺点，但是总的来说，第一种的优势更大，
+因为相对来说，只处理某一个通道的图像操作是比较少的，况且大多数文件格式也是交错方式存储的。在OpenCV中，cv::Mat也是采用交错存储的方式。
+这里，我依旧把像素作为一个单独的结构体来存储。
+
+
+又由于一个像素内包含的通道数可能不同，数据类型也会不同。为了实现通用性，我们设计了一个 \texttt{Pixel} 结构体模板：
+\begin{codeline}
+template <typename T, size_t Channels> // T 是数据类型，Channels 是通道数。
+struct Pixel {            
+public:
+    // 编译期检查：确保 T 是算术或枚举，Channels > 0
+    static_assert(...);
+
+    T data[Channels]; // 存储通道数据
+
+    // 默认构造函数 (初始化为0)
+    Pixel() { /* ... */ }
+    // 初始化列表构造函数，例如 pixel = {230, 255, 19}
+    Pixel(const std::initializer_list<T>& list) { /* ... */ }
+
+    // 通过 operator[] 访问通道 (带边界检查)
+    T& operator[](size_t i);
+    const T& operator[](size_t i) const;
+
+    // 静态成员和类型别名，方便获取信息
+    static constexpr size_t num_channels = Channels;
+    using value_type = T;
+};
+\end{codeline}
+这个设计我们可以通过模版存储不同类型的像素，比如说24位RGB。我们就创建Pixel<unsigned char,3>。
+对于灰色图或者说卷积核，可以为Pixel<unsigned char/float,1>。
+
+\subsection{图像容器：Image 模版}
+由于上面我的像素使用了模版类，Image也要使用模版类。如果把Pixel看成某种数据类型的话
+，我们的任务已经基本转换成了一个矩阵容器。一个矩阵类应该有什么元素？长，宽，以及指向数据数组的指针。
+但这三个要素还是显得有点不够用。
+
+
+首先我们需要保证内存的安全性。考虑到一个图像数据可能会被多个对象共享，所以说销毁一个对象的同时，
+必须要确定这个内存是否还有其他对象在用，才能决定是否释放。手动去counter++和delete[]来判断是一个非常折磨的事情，
+这里我们直接使用了C++11起支持的智能指针来管理内存。
+
+
+其次，有些图像，我们只想要其中的一部分，比如说我们只想要图像的中间部分。我们可以通过深拷贝来实现这个功能，
+但这样子相对低效。我们可以再用一个指针来指向我们想要的区域的开头。同时，这样的话就需要提前保存图像每一行所占用的字节数。
+
+
+这样，我们就确定了Image类所包含的数据：
+\begin{itemize}
+  \item \textbf{宽度}：size\_t 图像的宽度。
+  \item \textbf{高度}：size\_t 图像的高度。
+  \item \textbf{智能指针}：\texttt{std::shared\_ptr$<$T[]$>$} 指向原始图像数据的开头
+  \item \textbf{数据开头指针}：T * 指向期望图像块数据的开头。
+  \item \textbf{行大小}：size\_t 每行的字节数，用于计算行偏移。
+  \item \textbf{图像类型}：一种枚举类，区分这个图像是RGB、灰度图还是其他类型。
+\end{itemize}
+
+\subsection{图像类的操作}
+确定了\texttt{Image}类的数据成员后，我们需要给他赋予一些操作，
+使其真正成为一个易用且功能完备的图像容器。比如说浅拷贝，深拷贝，访问某一个像素的内容，选中ROI区域等等。
+
+
+首先，创建一个对象除了default创建一个空图像以及传入长、宽、颜色tag的构造外，
+一个关键的构造函数就是创建某一个图像的区域图像。ROI继承了原图像的智能指针，行大小以及图像类型，
+修改了长宽以及指向期望图像块的指针。可以在不用拷贝的情况下，直接对原图像进行操作，非常高效。
+
+
+对于浅拷贝，也就是指针指向同一个数据块。我们甚至可以不用写代码，编译器会自动生成一个default的拷贝构造函数，
+帮我们把类里面的元素都拷贝一遍。（为了可读性，也可以专门标注出一行来。）
+而对于深拷贝，我们则需要在把成员变量拷贝一遍的同时，用memcpy方法把我们的图像数据拷贝一遍，因为这个方法的性能开销比较大，
+所以说用=赋值的，都是default浅拷贝，深拷贝则使用clone()方法。
+
+
+对于像素数据的访问，通过at(x,y)来返回坐标处的像素引用。也可以通过ptr(y)来返回第y行的指针。
+
+
+此外，还提供了如\texttt{width()}, \texttt{height()}等众多方法来获取图像的各种属性，这样设计的原因当然是不希望外部能够随意的修改Image类的成员变量。
+ 其中\texttt{getPixelTypeChannels()}是一个静态\texttt{constexpr}方法，它能根据模板参数\texttt{PixelType}在编译期推断出像素的通道数。
+
+
+最后销毁一个对象则是用\texttt{release()}方法，这里我们显式的使用了shared\_ptr的reset()方法来告知智能指针这里的引用次数减一，这样我们图像数据的释放就由智能指针来管理了。
+
+
+集合上述设计要素，这是最终的Image类的设计：
+\begin{codeline}
+      template <typename PixelType>
+      class Image {
+      private:
+          size_t width_ = 0;
+          size_t height_ = 0;
+          size_t steps_in_bytes_ = 0; 
+          std::shared_ptr<PixelType[]> data_holder_; 
+          PixelType* p_data_ = nullptr;             // 指向当前图像/ROI的起始数据
+          ColorSpace color_space_ = ColorSpace::UNKNOWN;
+          // 内部辅助函数，用于分配内存和初始化元数据
+          void allocateAndInit(size_t width, size_t height, ColorSpace cs, 
+                               bool initialize_to_default = false);
+      public:
+          Image() ... * 各种构造函数 *
+          // 析构函数 (默认实现，shared_ptr会自动处理内存)
+          ~Image() = default;
+          // 赋值操作符 (默认浅拷贝)
+          Image<PixelType>& operator=(const Image<PixelType>& other) = default;
+          Image<PixelType>& operator=(Image<PixelType>&& other) noexcept = default;
+          // 创建图像副本 (深拷贝)
+          Image<PixelType> clone() const;
+          // 将当前图像数据深拷贝到目标图像
+          void copyTo(Image<PixelType>& dst) const;
+          // 释放资源，图像变为空
+          void release();
+          // 重新创建图像 (会释放原有数据)
+          void create(...);
+          * 访问像素函数行指针函数*
+          * 获取图像属性函数 *
+          // ROI操作符
+          Image<PixelType> roi(const Rect& roi_rect);
+          Image<PixelType> operator()(const Rect& roi_rect);
+          // 重载调整操作符
+          Image<PixelType>& operator+=(int value_offset); 
+      };
+  }
+\end{codeline}
+写到后面的时候，Image类已经在我眼里感觉比较庞大而且复杂了。
+但是，查阅OpenCV官方的cv::Mat Class Reference的使用文档后，我只觉得相形见绌。
+他的Mat单论构造方法就有二十几种，
+而且他的Mat类的设计也相当复杂，提供了相当多的功能以及sample，的确是一个复杂且优秀的图像库。
+\subsection{图像处理方法}
+基本原理和上个Project相同，请见reference:Project 3。
+
+\section{如何科学优化}
+本次Project很多优化方法和Project2,3所使用的方法相同，因此只是简略的介绍。
+\subsection{编译优化}
+在CMake构建系统中，针对Release模式配置了以下优化标志：
+\begin{itemize}
+    \item \texttt{-O3}：启用GCC最高级别的常规优化。
+    \item \texttt{-march=native}：指示编译器针对当前构建机器的CPU特性进行优化。
+    \item \texttt{-mavx2}：显式启用AVX2 (Advanced Vector Extensions 2) 指令集。
+\end{itemize}
+对于上述编译优化策略，我们在CMakeLists.txt中进行了如下配置，在非Release模式的时候，程序不会优化：
+\begin{codeline}
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -march=native -mavx2")
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
+\end{codeline}
+
+\subsection{SIMD优化}
+对于addBrightness功能，我们提供了两种实现方式：一种就是正常使用的for循环（addBrightness），
+另一种则是使用AVX2指令集来实现(addBrightness\_simd)。在实际测试中，AVX2确实带来了部分的性能提升。
+\begin{codeline}
+  // 使用AVX2指令集实现示例，已简化逻辑的实现细节
+  void addBrightness_simd(int value_offset) {
+      __m256i offset = _mm256_set1_epi8(value_offset);
+      for (size_t i = 0; i < width_ * height_; i += 32) {
+          __m256i pixels = _mm256_loadu_si256((__m256i*)&data_[i]);
+          pixels = _mm256_add_epi8(pixels, offset);
+          _mm256_storeu_si256((__m256i*)&data_[i], pixels);
+      }
+  }
+\end{codeline}
+
+
+\subsection{OpenMP并行化}
+OpenMP依旧伟大，能够几行代码加速几倍。库几乎在所有的处理函数中都使用了OpenMP来实现并行化。
+\begin{codeline}
+#pragma omp parallel for schedule(static)
+for (size_t y = 0; y < height; ++y) {
+    // ... 循环处理某些元素 ...
+}
+\end{codeline}
+
+\subsection{软拷贝以及高效ROI实现}
+如前所述，如果不是明确要求深拷贝，Image类的赋值操作符会使用默认的浅拷贝。
+这样做的好处是避免了不必要的内存拷贝，同时如果确实需要副本，也可以调用clone()函数来深拷贝。
+
+
+同时，ROI的实现用了一个非常巧妙的方式。我们指定一个区域，只需要修改图像的宽高和指向数据开头的指针即可，运行成本几乎可以忽略。
+具体原理Monad的Report中讲得比较详细，还有配图，可以见reference \cite{Monad2022}。
+
+\subsection{性能测试}
+我们的运行条件以及在上面说明，这里，我们延续使用Project3中的分辨率为9725 * 4862的24位无压缩BMP图像进行测试。
+我们分成以下三种cases: 完全无任何优化（编译时使用 cmake .. -DCMAKE\_BUILD\_TYPE=debug），
+O3 + OpenMP(调用addBrightness函数), O3 + OpenMP + AVX2（调用addBrightness\_simd函数）。程序运行五次时间取平均值。
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{graph.png}
+  \caption{性能测试结果}
+  \label{fig:input}
+\end{figure}
+可以看到，手动实现的SIMD指令集确实能带来性能提升，但是比较小。但无论如何，我们还是看到对比起优化前的速度，程序运行速度提升了大约五倍。
+
+
+\section{AI辅助了哪些工作}
+Move fast and break things.
+
+
+C++语言实在是太复杂了，很多实用的语法其实我根本没接触过。但是在Gemini的辅助下，我能够极快速的上手C++，虽然有些语法我并不清楚它是怎么实现的，但anyway, it works。这在很多情况下就够用了。
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.5\textwidth]{token.png}
+  \caption{30万个tokens的上下文！}
+  \label{fig:input}
+\end{figure}
+
+
+我这次写Project只使用了一个对话，看看Gemini 2.5Pro面对巨量文本，数据，要求的时候，
+它还能不能正确的反应。特别是写类相关的时候，AI能不能基于前面设计好的内容，
+快速且正确的移植新方法：事实证明它做到了，而且目测免费的大模型只有它能做到，因为它支持1M的上下文。
+
+
+比如说，在我设计好大致的Pixel和Image类，以及一些简单的方法后，对话上下文已经来到了十万多。
+我叫Gemini帮我移植fliter2D，即通用卷积核的函数，它在第一遍的时候就提供了能够正确运行的函数。
+这其实是非常恐怖的，说明它不仅能够正确调用我设计的类的方法，还能够提供一整个读取，卷积，保存的工作链。\sout{真的要失业了吗}。
+
+
+
+\section{结语}
+在这个Project中，我感受到了C++极其复杂的语言规则，里面有一堆很新很快的函数和方法。
+也体会到了写template的方便，对于不同的图像类型，我只用写一次函数，就能支持不同的图像类型，
+剩下的全部交给编译器来处理。
+
+
+同时，shared\_ptr是一个非常伟大的发明。它真的一定程度上解决了跨对象内存管理的难点，
+在对象生命周期结束或不再被引用时自动释放所管理的内存的时候，它能够帮我自动释放内存，而不是我手动计数并且释放。
+\sout{说不定它早出几十年，Java就会黯然失色。}
+
+
+总之，我个人对我的库的设计还是比较满意的。
+一个有趣的设计点是复用了 \texttt{Image} 类来存储卷积核的数据。这种做法简化了卷积操作的接口，也允许用户方便地创建和检视自定义的卷积核。
+当然，这也解释了为何像OpenCV这样的库将其核心图像容器命名为 \texttt{cv::Mat}而非 \texttt{cv::Img}，因为矩阵更具通用性，可以自然地包含卷积核这类非典型“图像”的数据结构，从而减少了命名上的潜在歧义。
+
+
+本项目仍存在一些待完善之处，例如未能支持更多的图像文件格式的IO操作，以及不同颜色空间之间的转换功能。若能补齐这些方面，还能实现更多很炫酷的操作。
+
+
+同时，与先前Project一样，在DDL结束后我也会将本次Project中涉及到的所有源码开源，放在 https://github.com/BrightonXX/SUSTech-CPP-Project 下。
+
+
+\textbf{感谢各位能读到这里。}
+\newpage % 强制换页
+\section*{References}
+\begin{thebibliography}{9}
+
+\bibitem{Monad2022} 
+Yan W.Q. \textit{CS205 Project5: Matrix Class}. 
+Southern University of Science and Technology, 2022. 
+[Source code]. Available: 
+\href{https://github.com/YanWQ-monad/SUSTech_CS205_Projects}{github.com/YanWQ-monad/CS205\_Project5} 
+
+\bibitem{OpenCVRef}
+OpenCV (Open Source Computer Vision Library). \textit{cv::Mat Class Reference}.
+Available: \href{https://docs.opencv.org/3.4/d3/d63/classcv_1_1Mat.htmll}{docs.opencv.org/master/class\_Mat.html}
+
+\bibitem{proj3} Brighton 
+\textit{Project3: A Simple Image Processor}. 
+Southern University of Science and Technology, 2025. 
+[Source code]. Available: 
+\href{https://github.com/BrightonXX/SUSTech-CPP-Project}{github.com/BrightonXX/SUSTech-CPP-Project} 
+
+\end{thebibliography}
+\end{document}
