@@ -15,6 +15,6 @@ Lecturer: Prof. Shiqi Yu
 |  2  | Dot Product of Two Vectors          | 使用C和Java计算点积   | 99 | 20-25 hrs   |
 |  3  | BMP Image Processing          | 处理BMP图像   | 98 | 15-20 hrs   |
 |  4  | A Simple Image Library          | 图像库   | ? | 15-20 hrs   |
-|  5  | Cross-Language Performance Analysis          | 比较不同语言速度   | ? | ? hrs   |
+|  5  | Cross-Language Performance Analysis          | 比较不同语言速度   | ? | 15-20 hrs   |
 
 本GitHub Repositories会在这个学期结束后，我有空闲时间的时候再次修缮。
