@@ -10,13 +10,13 @@
 
 ## 📸 Demo
 
-<img src="./demo.png" width="240" /> 
+<img src="./demo.png" width="720" /> 
 
 ## ⚡️ Supported Operations
 
 *   **Basic**: `add` (亮度), `average` (图像融合), `grayscale` (灰度化), `flip` (镜像翻转).
 *   **Advanced**:
-    *   **Box Blur**: 优化的滑动窗口算法 (Sliding Window)，复杂度 $O(N)$。
+    *   **Box Blur**: 优化的滑动窗口算法 (Sliding Window)。
     *   **Sobel Edge Detection**: 基于卷积算子的边缘检测。
 
 ## 🖋 Feedback
