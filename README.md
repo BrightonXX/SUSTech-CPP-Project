@@ -6,8 +6,6 @@
 
 </div>
 
-[![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2FBrightonXX%2FSUSTech-CPP-Project&label=Visitors&countColor=%23263759)](https://visitorbadge.io/status?path=https%3A%2F%2Fgithub.com%2FBrightonXX%2FSUSTech-CPP-Project)
-
 ## 📚 简介 
 
 **Semester:** 2025 Spring  
@@ -27,6 +25,7 @@
 |  4  | A Simple Image Library          | 图像库   | 95 | 15 hrs   |
 |  5  | Cross-Language Performance Analysis          | 比较不同语言速度   | 95 | 15 hrs   |
 
+[![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2FBrightonXX%2FSUSTech-CPP-Project&label=Visitors&countColor=%23263759)](https://visitorbadge.io/status?path=https%3A%2F%2Fgithub.com%2FBrightonXX%2FSUSTech-CPP-Project)
 
 ## 💻 对于这门课程的建议
 
