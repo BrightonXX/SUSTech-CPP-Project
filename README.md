@@ -11,9 +11,7 @@
 **Semester:** 2025 Spring  
 **Lecturer:** Prof. Shiqi Yu
 
-本仓库包含了 南方科技大学 2025 春季学期 **CS219 Advanced Programming** 课程我的 Project 1~5 所有源码以及报告，包含 *.c/cpp, *.tex, *.pdf，但不包含Lab资料。
-
-计算机科学与工程系在2025 Spring将 **CS205 C/C++ Program Design** 替换为 **CS219 Advanced Programming**，课程大纲几乎一致，可以理解为没有本质区别。
+本仓库包含了 南方科技大学 2025 春季学期 **CS219 Advanced Programming** 课程我的 Project 1~5 所有源码以及报告，包含 *.c/cpp, *.tex, *.pdf，但不包含Lab资料。计算机科学与工程系在2025 Spring将 **CS205 C/C++ Program Design** 替换为 **CS219 Advanced Programming**，课程大纲几乎一致。
 
 ### Projects
 
@@ -84,6 +82,8 @@ Haibin Lai的 2024 Spring Projects仓库： [CS205-CPP-Programing-Project](https
 Maystern 的超级全面课程仓库： [SUSTech_CS205_Cpp_Projects](https://github.com/Maystern/SUSTech_CS205_Cpp_Projects)
 
 Monad 的 2022 Fall Projects仓库：[SUSTech_CS205_Projects](https://github.com/YanWQ-monad/SUSTech_CS205_Projects)
+
+##
 
 <div align="center">
   <p>如果这个仓库对你有帮助，请给一个 ⭐️ <strong>Star</strong>！这对我很重要！</p>
