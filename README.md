@@ -86,6 +86,6 @@ Monad 的 2022 Fall Projects仓库：[SUSTech_CS205_Projects](https://github.com
 ##
 
 <div align="center">
-  <p>如果这个仓库对你有帮助，请给一个 ⭐️ <strong>Star</strong>！这对我很重要！</p>
+  <p>如果这个仓库对你有帮助，请给一个 ⭐️ <strong>Star</strong>！</p>
   <p>If this project helps you, please give it a ⭐️ Star!</p>
 </div>
