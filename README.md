@@ -2,16 +2,22 @@
 
 # SUSTech CS219 (Advance Programming, former CS205) Projects
 
+📖 Language: 中文 | [English](https://github.com/BrightonXX/SUSTech-CPP-Project/blob/main/README_en.md)
+
 </div>
+
+## 📚 简介 
 
 Semester: 2025 Spring  
 Lecturer: Prof. Shiqi Yu
+
+本仓库包含了 南方科技大学 2025 春季学期 **CS219 Advanced Programming** 课程我的 Project 1~5 所有源码以及报告，包含 *.c/cpp, *.tex, *.pdf，但不包含Lab资料。
 
 ### Projects
 
 |  #  |                  名称              |     简介      | 分数 | 大约用时 |
 |:---:|-------------------------------------|--------------|:---:|---------:|
-|  1  | A Simple Calculator                 | 高精度计算器     | 97 | 50 hrs   |
+|  1  | A Simple Calculator                 | 高精度计算器     | 97 | 40 hrs   |
 |  2  | Dot Product of Two Vectors          | 使用C和Java计算点积   | 99 | 20 hrs   |
 |  3  | BMP Image Processing          | 处理BMP图像   | 98 | 15 hrs   |
 |  4  | A Simple Image Library          | 图像库   | 95 | 15 hrs   |
@@ -24,12 +30,13 @@ Lecturer: Prof. Shiqi Yu
 ### Report：
 
 1. **请使用 LaTeX 写报告。**  
-   根据我对存于 GitHub 中课程其他人报告的阅读和得分经验，LaTeX 报告得分大约会比 Markdown 报告平均高 3-5 分，因为latex的确从精致性上完全碾压 Markdown。就算按最少的提升 3 分来算，使用 LaTeX 至少能够提供 `3 * 5 / 500 * 65 = 1.95` 分的总评加成。而且我非常感谢这门课让我具备了 LaTeX 几乎全套的使用能力，并能够马上运用在其他课程包括以后的毕业设计。
+   根据我对存于 GitHub 中课程其他人报告的阅读和得分经验，LaTeX 报告得分大约会比 Markdown 报告平均高 3-5 分，因为LaTex的确从精致性上超越 Markdown 很多。就算按最少的提升 3 分来算，使用 LaTeX 至少能够提供 `3 * 5 / 500 * 65 = 1.95` 分的总评加成。而且我非常感谢这门课让我具备了 LaTeX 几乎全套的使用能力，并能够马上运用在其他许多课程。
 
-   假如之前没有使用过 LaTeX，我的建议是：
+   假如你是个 LaTeX 新手，我的建议是：
    - 先叫 GPT 帮你生成一段简单的 LaTeX；
    - 然后在在线平台 [Overleaf](https://www.overleaf.com) 实时编译（因为配置本地环境相对复杂）；
    - 再逐步修改，也可以参考我在 Project3-5 中的 `.tex` 文件修改，也可以一步步问GPT实现某一个效果该怎么做；
+   - Overleaf上有很多很漂亮的模版，也可以直接拿来使用，推荐 IEEE Trans。
    - LaTeX 并不是什么困难的东西，本质上是一个线性调用函数的松散程序；
    - 摸索起来很快，只要小几个小时就可以正式投产。
 
