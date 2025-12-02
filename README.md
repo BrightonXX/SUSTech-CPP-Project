@@ -1,6 +1,6 @@
 <div align="center">
 
-# SUSTech CS219 (Advance Programming, former CS205) Projects
+# SUSTech CS219 (Advance Programming) Projects
 
 📖 Language: **中文** | [English](./README_en.md)
 
