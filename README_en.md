@@ -29,7 +29,7 @@ The Department of Computer Science and Engineering replaced **CS205 C/C++ Progra
 
 ## ⚠️ WARNING
 
-If you are cannot read Chinese, it's highly recommanded that **do not** study this course and repository, since everything is in CHINESE!  
+If you are cannot read Chinese, it's highly recommanded that **do not** study from this repository since projects are in Chinese. However, the course materials are in English. By the way, Prof. Yu speaks Chinese during lectures.
 
 ## 💻 Suggestions for this Course
 
